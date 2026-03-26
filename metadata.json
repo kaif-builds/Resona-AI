@@ -1,0 +1,7 @@
+{
+  "name": "Remix: Resona AI",
+  "description": "Resona AI is an AI-powered voice cloning platform that allows creators to generate high-quality, realistic voice clones for their content.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
