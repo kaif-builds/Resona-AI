@@ -1,0 +1,41 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents a user of the AI Voice Cloner.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The unique ID of the user." },
+        "email": { "type": "string", "format": "email", "description": "The user's email address." },
+        "displayName": { "type": "string", "description": "The user's display name." },
+        "photoURL": { "type": "string", "format": "uri", "description": "The user's profile photo URL." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the user was created." }
+      },
+      "required": ["uid", "email"]
+    },
+    "VoiceClone": {
+      "title": "VoiceClone",
+      "description": "Represents a voice clone created by a user.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The unique ID of the voice clone." },
+        "userId": { "type": "string", "description": "The ID of the user who created the clone." },
+        "name": { "type": "string", "description": "The name given to the voice clone." },
+        "audioUrl": { "type": "string", "format": "uri", "description": "The URL of the voice sample in storage." },
+        "status": { "type": "string", "enum": ["pending", "ready", "error"], "description": "The status of the cloning process." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the clone was created." }
+      },
+      "required": ["id", "userId", "name", "audioUrl", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents."
+    },
+    "/clones/{cloneId}": {
+      "schema": "VoiceClone",
+      "description": "Voice clone metadata documents."
+    }
+  }
+}

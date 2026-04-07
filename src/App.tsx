@@ -5,7 +5,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, useMotionValue, useSpring, useTransform, AnimatePresence } from 'motion/react';
-import { Search, ArrowRight, Menu, X, Globe, Layers, Cpu, Users, Gamepad2, Mic2, Activity, Github, Twitter, Linkedin, Mail, Play, Square, Trash2, CheckCircle2, Music } from 'lucide-react';
+import { Search, ArrowRight, Menu, X, Globe, Layers, Cpu, Users, Gamepad2, Mic2, Activity, Github, Twitter, Linkedin, Mail, Play, Square, Trash2, CheckCircle2, Music, LoaderCircle, Download } from 'lucide-react';
+import { uploadVoiceSample, synthesizeSpeech as synthesizeSpeechApi, deleteProfile } from './resonaApi.js';
+import { storage, db } from './firebase';
+import { ref as storageRef, uploadBytes } from 'firebase/storage';
+import { collection, doc, getDocs, orderBy, query, serverTimestamp, setDoc } from 'firebase/firestore';
 
 // --- Types ---
 
@@ -353,12 +357,49 @@ export default function App() {
 function VoiceCloningPage({ onBack }: { onBack: () => void }) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [sampleUrl, setSampleUrl] = useState<string | null>(null);
   const [audioName, setAudioName] = useState<string | null>(null);
+  const [profileId, setProfileId] = useState<string | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const getAudioDurationSeconds = async (file: File) => {
+    const url = URL.createObjectURL(file);
+    try {
+      const audio = new Audio();
+      audio.preload = 'metadata';
+      audio.src = url;
+      const duration = await new Promise<number>((resolve, reject) => {
+        audio.onloadedmetadata = () => resolve(Number.isFinite(audio.duration) ? audio.duration : 0);
+        audio.onerror = () => reject(new Error('Failed to read audio metadata.'));
+      });
+      return duration || 0;
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  const persistProfileToFirebase = async (pId: string, file: File, durationSeconds: number) => {
+    const targetRef = storageRef(storage, `voices/${pId}/sample.wav`);
+    await uploadBytes(targetRef, file, { contentType: file.type || 'audio/wav' });
+    await setDoc(doc(db, 'profiles', pId), {
+      profileId: pId,
+      createdAt: serverTimestamp(),
+      duration: durationSeconds,
+    });
+  };
+
+  const createProfileFromSample = async (file: File, durationSeconds: number) => {
+    const res = await uploadVoiceSample(file);
+    const pId = res?.profile_id ?? res?.profileId ?? res?.id ?? null;
+    if (!pId) throw new Error('Profile created, but no profileId returned.');
+    setProfileId(pId);
+    await persistProfileToFirebase(pId, file, durationSeconds);
+    return pId;
+  };
 
   const startRecording = async () => {
     try {
@@ -376,16 +417,22 @@ function VoiceCloningPage({ onBack }: { onBack: () => void }) {
       mediaRecorder.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
         const url = URL.createObjectURL(blob);
-        setAudioUrl(url);
+        setSampleUrl(url);
         setAudioName('Recorded Sample');
         stream.getTracks().forEach(track => track.stop());
+
+        const file = new File([blob], `sample-${Date.now()}.webm`, { type: 'audio/webm' });
+        createProfileFromSample(file, recordingTime)
+          .catch((err) => console.error('createProfileFromSample failed', err));
       };
 
       mediaRecorder.start();
       setIsRecording(true);
       setRecordingTime(0);
-      setAudioUrl(null);
+      setSampleUrl(null);
       setAudioName(null);
+      setProfileId(null);
+      setAudioUrl(null);
 
       timerRef.current = setInterval(() => {
         setRecordingTime(prev => prev + 1);
@@ -409,10 +456,16 @@ function VoiceCloningPage({ onBack }: { onBack: () => void }) {
     if (file) {
       if (file.type.startsWith('audio/')) {
         const url = URL.createObjectURL(file);
-        setAudioUrl(url);
+        setSampleUrl(url);
         setAudioName(file.name);
         setIsRecording(false);
+        setProfileId(null);
+        setAudioUrl(null);
         if (timerRef.current) clearInterval(timerRef.current);
+
+        getAudioDurationSeconds(file)
+          .then((duration) => createProfileFromSample(file, duration))
+          .catch((err) => console.error('createProfileFromSample failed', err));
       } else {
         alert("Please upload a valid audio file.");
       }
@@ -475,7 +528,7 @@ function VoiceCloningPage({ onBack }: { onBack: () => void }) {
               <p className="text-white/40 text-xs md:text-sm leading-relaxed font-light">
                 {isRecording 
                   ? 'Capturing your vocal signature. Speak naturally for best results.' 
-                  : audioUrl 
+                  : sampleUrl 
                     ? 'Your voice sample is ready for processing. You can preview it below.'
                     : 'Record a 30-second script to capture your unique vocal characteristics, emotional range, and cadence.'}
               </p>
@@ -496,15 +549,17 @@ function VoiceCloningPage({ onBack }: { onBack: () => void }) {
               </div>
             )}
 
-            {audioUrl && !isRecording && (
+            {sampleUrl && !isRecording && (
               <div className="space-y-4 py-4">
-                <audio src={audioUrl} controls className="w-full h-10 filter invert opacity-60" />
+                <audio src={sampleUrl} controls className="w-full h-10 filter invert opacity-60" />
                 <div className="flex gap-4">
                   <motion.button 
                     whileHover={{ x: 5, color: '#f87171' }}
                     onClick={() => {
-                      setAudioUrl(null);
+                      setSampleUrl(null);
                       setAudioName(null);
+                      setProfileId(null);
+                      setAudioUrl(null);
                     }}
                     className="flex items-center gap-2 text-[10px] uppercase tracking-[0.4em] text-white/40 transition-colors"
                   >
@@ -514,7 +569,7 @@ function VoiceCloningPage({ onBack }: { onBack: () => void }) {
               </div>
             )}
 
-            {!isRecording && !audioUrl && (
+            {!isRecording && !sampleUrl && (
               <motion.button 
                 whileHover={{ scale: 1.02, backgroundColor: 'rgba(255,255,255,0.1)' }}
                 whileTap={{ scale: 0.98 }}
@@ -575,6 +630,9 @@ function VoiceCloningPage({ onBack }: { onBack: () => void }) {
           </motion.div>
         </div>
 
+        <ProfileManager profileId={profileId} setProfileId={setProfileId} />
+        <SynthesisPanel profileId={profileId} onAudioUrl={setAudioUrl} />
+
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -586,9 +644,9 @@ function VoiceCloningPage({ onBack }: { onBack: () => void }) {
               <div className="space-y-2 w-full sm:w-auto">
                 <div className="text-[9px] md:text-[10px] uppercase tracking-[0.3em] text-white/20 font-bold">Status</div>
                 <div className="text-xs md:text-sm font-medium flex items-center gap-3">
-                  <div className={`w-2 h-2 rounded-full ${audioUrl ? 'bg-emerald-500' : 'bg-white/20'} ${isRecording ? 'animate-pulse' : ''}`} /> 
+                  <div className={`w-2 h-2 rounded-full ${sampleUrl ? 'bg-emerald-500' : 'bg-white/20'} ${isRecording ? 'animate-pulse' : ''}`} /> 
                   <span className="tracking-widest uppercase text-[10px] md:text-[11px]">
-                    {isRecording ? 'Recording in progress' : audioUrl ? 'Ready for synthesis' : 'Awaiting voice sample'}
+                    {isRecording ? 'Recording in progress' : sampleUrl ? 'Profile creation in progress' : 'Awaiting voice sample'}
                   </span>
                 </div>
               </div>
@@ -598,15 +656,6 @@ function VoiceCloningPage({ onBack }: { onBack: () => void }) {
                 <div className="text-xs md:text-sm font-medium tracking-widest uppercase text-[10px] md:text-[11px]">Resona v2.4 Pro</div>
               </div>
             </div>
-            <motion.button 
-              whileHover={audioUrl && !isRecording ? { scale: 1.02, backgroundColor: '#34d399' } : {}}
-              whileTap={audioUrl && !isRecording ? { scale: 0.98 } : {}}
-              disabled={!audioUrl || isRecording}
-              className={`w-full md:w-auto px-12 py-5 text-black text-[11px] uppercase tracking-[0.4em] font-bold transition-all flex items-center justify-center gap-4 ${audioUrl && !isRecording ? 'bg-emerald-500 shadow-[0_0_40px_rgba(16,185,129,0.2)] hover:shadow-[0_0_60px_rgba(16,185,129,0.4)]' : 'bg-white/10 text-white/20 cursor-not-allowed'}`}
-            >
-              <Cpu size={16} strokeWidth={2.5} />
-              {audioUrl ? 'Generate Clone' : 'Awaiting Sample'}
-            </motion.button>
           </div>
         </motion.div>
       </main>
@@ -641,6 +690,318 @@ function VoiceCloningPage({ onBack }: { onBack: () => void }) {
         </div>
       </footer>
     </div>
+  );
+}
+
+function downloadAudio(audioUrl: string, filename: string) {
+  const a = document.createElement('a');
+  a.href = audioUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+type ProfileListItem = {
+  id: string;
+  name?: string;
+  createdAt?: string | number | Date | null;
+};
+
+function formatMonthYear(value: unknown) {
+  const d =
+    value instanceof Date ? value :
+    typeof value === 'number' ? new Date(value) :
+    typeof value === 'string' ? new Date(value) :
+    null;
+  if (!d || Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString(undefined, { month: 'short', year: 'numeric' });
+}
+
+function ProfileManager({
+  profileId,
+  setProfileId,
+}: {
+  profileId: string | null;
+  setProfileId: React.Dispatch<React.SetStateAction<string | null>>;
+}) {
+  const [profiles, setProfiles] = useState<ProfileListItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = async () => {
+    setError(null);
+    setIsLoading(true);
+    try {
+      const q = query(collection(db, 'profiles'), orderBy('createdAt', 'desc'));
+      const snapshot = await getDocs(q);
+      const normalized: ProfileListItem[] = snapshot.docs.map((d) => {
+        const data: any = d.data();
+        return {
+          id: String(data?.profileId ?? d.id),
+          name: data?.name,
+          createdAt: data?.createdAt?.toDate ? data.createdAt.toDate() : data?.createdAt,
+        };
+      }).filter((p) => p.id && p.id !== 'undefined');
+      setProfiles(normalized);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load profiles.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleDelete = async (id: string) => {
+    setError(null);
+    try {
+      await deleteProfile(id);
+      await refresh();
+      if (profileId === id) setProfileId(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to delete profile.');
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.3 }}
+      className="glass-panel p-6 md:p-10 space-y-6 md:space-y-8 border border-white/5 hover:border-emerald-500/30 transition-all"
+    >
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="space-y-2">
+          <div className="text-[9px] md:text-[10px] uppercase tracking-[0.4em] text-emerald-500 font-bold">Profiles</div>
+          <h3 className="text-xl md:text-2xl font-light tracking-tight">Voice Profiles</h3>
+        </div>
+      </div>
+
+      {isLoading && (
+        <div className="space-y-3">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-14 bg-white/[0.03] border border-white/10 opacity-60 animate-pulse" />
+          ))}
+        </div>
+      )}
+
+      {!isLoading && profiles.length === 0 && (
+        <div className="text-[10px] uppercase tracking-[0.3em] text-white/25">
+          No voice profiles yet.
+        </div>
+      )}
+
+      {!isLoading && profiles.length > 0 && (
+        <div className="space-y-3">
+          {profiles.map((p) => (
+            <div
+              key={p.id}
+              className={`bg-white/[0.03] border p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4 ${profileId === p.id ? 'border-emerald-500/40' : 'border-white/10'}`}
+            >
+              <div className="space-y-1">
+                <div className="text-[10px] uppercase tracking-[0.35em] text-white/70">
+                  {p.name ? p.name : p.id}
+                </div>
+                <div className="text-[10px] uppercase tracking-[0.25em] text-white/25">
+                  {formatMonthYear(p.createdAt)}
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setProfileId(p.id)}
+                  className="px-6 py-3 bg-emerald-500/15 border border-emerald-500/25 text-[10px] uppercase tracking-[0.35em] font-bold text-emerald-200"
+                >
+                  Use
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => handleDelete(p.id)}
+                  className="px-6 py-3 bg-red-500/10 border border-red-400/25 text-[10px] uppercase tracking-[0.35em] font-bold text-red-200"
+                >
+                  Delete
+                </motion.button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {error && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-red-500/10 border border-red-400/25 backdrop-blur-xl p-4 text-red-200 text-[10px] uppercase tracking-[0.2em]"
+        >
+          Mission Alert: {error}
+        </motion.div>
+      )}
+    </motion.div>
+  );
+}
+
+function SynthesisPanel({
+  profileId,
+  onAudioUrl,
+}: {
+  profileId: string | null;
+  onAudioUrl: (url: string | null) => void;
+}) {
+  const [text, setText] = useState('');
+  const [language, setLanguage] = useState('en');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+
+  const maxWords = 500;
+  const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
+  const isOverLimit = wordCount > maxWords;
+
+  const LANG_OPTIONS = [
+    'en', 'es', 'fr', 'de', 'it', 'pt', 'pl', 'tr', 'ru', 'nl', 'cs', 'ar', 'zh-cn', 'ja', 'hu', 'ko', 'hi'
+  ];
+
+  const canGenerate = !!profileId && !!text.trim() && !isOverLimit && !isLoading;
+
+  const handleGenerate = async () => {
+    if (!profileId) return;
+    if (!text.trim()) return;
+    if (isOverLimit) {
+      setError('Input exceeds 500 words. Reduce text and re-run synthesis.');
+      return;
+    }
+
+    setError(null);
+    setIsLoading(true);
+    try {
+      const res = await synthesizeSpeechApi({ text, profile_id: profileId, language });
+
+      let nextUrl: string | null = null;
+      if (typeof res === 'string') nextUrl = res;
+      else if (res?.audio_url) nextUrl = res.audio_url;
+      else if (res?.audio_base64) nextUrl = `data:audio/wav;base64,${res.audio_base64}`;
+      else throw new Error('Synthesis completed but returned no audio.');
+
+      setAudioUrl(nextUrl);
+      onAudioUrl(nextUrl);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Synthesis failed.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.35 }}
+      className="glass-panel p-6 md:p-10 space-y-6 md:space-y-8 border border-white/5 hover:border-emerald-500/30 transition-all"
+    >
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="space-y-2">
+          <div className="text-[9px] md:text-[10px] uppercase tracking-[0.4em] text-emerald-500 font-bold">Synthesis</div>
+          <h3 className="text-xl md:text-2xl font-light tracking-tight">Text-to-Speech</h3>
+        </div>
+        <div className="text-[10px] uppercase tracking-[0.3em] text-white/30">
+          {wordCount} / {maxWords} words
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={6}
+          className="w-full bg-white/[0.03] border border-white/10 text-white/80 p-4 text-sm leading-relaxed focus:outline-none focus:border-emerald-500/40"
+          placeholder="Type or paste text to synthesise..."
+        />
+        {isOverLimit && (
+          <div className="text-[10px] uppercase tracking-[0.25em] text-red-200">
+            Word limit exceeded.
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <div className="text-[9px] md:text-[10px] uppercase tracking-[0.3em] text-white/20 font-bold">Language</div>
+        <select
+          value={language}
+          onChange={(e) => setLanguage(e.target.value)}
+          className="w-full bg-white/[0.03] border border-white/10 text-white/80 p-4 text-sm focus:outline-none focus:border-emerald-500/40"
+        >
+          {LANG_OPTIONS.map((opt) => (
+            <option key={opt} value={opt} className="bg-[#0a0a0a]">
+              {opt}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="space-y-4">
+        <motion.button
+          whileHover={canGenerate ? { scale: 1.02, backgroundColor: '#34d399' } : {}}
+          whileTap={canGenerate ? { scale: 0.98 } : {}}
+          disabled={!canGenerate}
+          onClick={handleGenerate}
+          className={`w-full md:w-auto px-10 py-5 text-black text-[11px] uppercase tracking-[0.4em] font-bold transition-all flex items-center justify-center gap-4 ${canGenerate ? 'bg-emerald-500 shadow-[0_0_40px_rgba(16,185,129,0.2)] hover:shadow-[0_0_60px_rgba(16,185,129,0.4)]' : 'bg-white/10 text-white/20 cursor-not-allowed'}`}
+        >
+          <Cpu size={16} strokeWidth={2.5} />
+          Generate Audio
+        </motion.button>
+
+        <AnimatePresence>
+          {isLoading && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: [0.35, 1, 0.35], y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
+              className="text-[10px] uppercase tracking-[0.35em] text-emerald-200 flex items-center gap-3"
+            >
+              <LoaderCircle size={14} className="animate-spin" />
+              Synthesising...
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-red-500/10 border border-red-400/25 backdrop-blur-xl p-4 text-red-200 text-[10px] uppercase tracking-[0.2em]"
+          >
+            Mission Alert: {error}
+          </motion.div>
+        )}
+
+        {audioUrl && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-4 border border-white/10 bg-white/[0.02] p-5"
+          >
+            <audio controls src={audioUrl} className="w-full h-10 filter invert opacity-70" />
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => downloadAudio(audioUrl, 'resona-output.wav')}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-white/[0.04] border border-white/10 text-[10px] uppercase tracking-[0.35em] font-bold text-white/70 hover:text-white transition-colors"
+            >
+              <Download size={12} />
+              Download
+            </motion.button>
+          </motion.div>
+        )}
+      </div>
+    </motion.div>
   );
 }
 
