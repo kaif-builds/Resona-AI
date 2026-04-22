@@ -26,7 +26,7 @@ app = FastAPI(
 )
 
 # ── CORS (allow your Vercel frontend + localhost dev) ──────────────────────────
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -51,6 +51,8 @@ def get_tts():
     global _tts_model
     if _tts_model is None:
         logger.info("Loading Coqui TTS model (first boot — may take a minute)...")
+        # Auto-accept Coqui TOS to avoid interactive prompt hanging the server
+        os.environ["COQUI_TOS_AGREED"] = "1"
         from TTS.api import TTS
         # XTTS-v2: best quality, supports voice cloning from a single sample
         _tts_model = TTS("tts_models/multilingual/multi-dataset/xtts_v2", gpu=False)
@@ -134,7 +136,7 @@ async def create_profile(
     meta = {
         "profile_id": profile_id,
         "name": name,
-        "sample_path": str(wav_path),
+        "sample_path": str(wav_path.resolve()),
         "sample_duration": round(duration, 2),
         "created_at": datetime.datetime.utcnow().isoformat()
     }
@@ -240,11 +242,26 @@ def get_sample(profile_id: str):
 #  HELPERS
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _find_executable(name: str) -> str:
+    """Find an executable by name, checking common Homebrew paths as fallback."""
+    path = shutil.which(name)
+    if path:
+        return path
+    # Homebrew on Apple Silicon / Intel fallback
+    for prefix in ["/opt/homebrew/bin", "/usr/local/bin"]:
+        candidate = os.path.join(prefix, name)
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    return name  # last resort — let the OS try
+
+
 def _convert_to_wav(src: Path, dst: Path):
     """Convert any audio format to 22050Hz mono WAV using ffmpeg."""
     import subprocess
+    ffmpeg = _find_executable("ffmpeg")
+    logger.info(f"Using ffmpeg at: {ffmpeg}")
     result = subprocess.run(
-        ["ffmpeg", "-y", "-i", str(src), "-ar", "22050", "-ac", "1", str(dst)],
+        [ffmpeg, "-y", "-i", str(src), "-ar", "22050", "-ac", "1", str(dst)],
         capture_output=True, text=True
     )
     if result.returncode != 0:
@@ -260,8 +277,9 @@ def _get_audio_duration(wav_path: Path) -> float:
     except Exception:
         # Fallback via ffprobe
         import subprocess, json
+        ffprobe = _find_executable("ffprobe")
         result = subprocess.run(
-            ["ffprobe", "-v", "quiet", "-print_format", "json",
+            [ffprobe, "-v", "quiet", "-print_format", "json",
              "-show_streams", str(wav_path)],
             capture_output=True, text=True
         )

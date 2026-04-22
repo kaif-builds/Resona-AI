@@ -393,11 +393,15 @@ function VoiceCloningPage({ onBack }: { onBack: () => void }) {
   };
 
   const createProfileFromSample = async (file: File, durationSeconds: number) => {
-    const res = await uploadVoiceSample(file);
+    const res = await uploadVoiceSample(file, `My Voice ${Date.now()}`);
     const pId = res?.profile_id ?? res?.profileId ?? res?.id ?? null;
     if (!pId) throw new Error('Profile created, but no profileId returned.');
     setProfileId(pId);
-    await persistProfileToFirebase(pId, file, durationSeconds);
+    try {
+      await persistProfileToFirebase(pId, file, durationSeconds);
+    } catch (fbErr) {
+      console.warn('Firebase sync skipped (no credentials configured):', fbErr);
+    }
     return pId;
   };
 
@@ -733,6 +737,7 @@ function ProfileManager({
     setError(null);
     setIsLoading(true);
     try {
+      // Try Firebase first
       const q = query(collection(db, 'profiles'), orderBy('createdAt', 'desc'));
       const snapshot = await getDocs(q);
       const normalized: ProfileListItem[] = snapshot.docs.map((d) => {
@@ -744,8 +749,24 @@ function ProfileManager({
         };
       }).filter((p) => p.id && p.id !== 'undefined');
       setProfiles(normalized);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load profiles.');
+    } catch (fbErr) {
+      console.warn('Firebase unavailable, falling back to backend API:', fbErr);
+      // Fallback: load profiles straight from the backend API
+      try {
+        const API_BASE_URL = (import.meta as any).env?.VITE_RESONA_API_BASE_URL || 'http://localhost:8000';
+        const res = await fetch(`${API_BASE_URL}/api/profiles`);
+        if (res.ok) {
+          const data = await res.json();
+          const list: ProfileListItem[] = (data.profiles || []).map((p: any) => ({
+            id: p.profile_id || p.id,
+            name: p.name,
+            createdAt: p.created_at,
+          }));
+          setProfiles(list);
+        }
+      } catch (apiErr) {
+        setError('Could not load profiles from Firebase or backend.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -884,10 +905,17 @@ function SynthesisPanel({
       const res = await synthesizeSpeechApi({ text, profile_id: profileId, language });
 
       let nextUrl: string | null = null;
-      if (typeof res === 'string') nextUrl = res;
-      else if (res?.audio_url) nextUrl = res.audio_url;
-      else if (res?.audio_base64) nextUrl = `data:audio/wav;base64,${res.audio_base64}`;
-      else throw new Error('Synthesis completed but returned no audio.');
+      if (res instanceof Blob) {
+        nextUrl = URL.createObjectURL(res);
+      } else if (typeof res === 'string') {
+        nextUrl = res;
+      } else if (res?.audio_url) {
+        nextUrl = res.audio_url;
+      } else if (res?.audio_base64) {
+        nextUrl = `data:audio/wav;base64,${res.audio_base64}`;
+      } else {
+        throw new Error('Synthesis completed but returned no audio.');
+      }
 
       setAudioUrl(nextUrl);
       onAudioUrl(nextUrl);

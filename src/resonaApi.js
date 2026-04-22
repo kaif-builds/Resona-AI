@@ -32,11 +32,11 @@ async function request(path, options = {}) {
   return response.text();
 }
 
-export async function uploadVoiceSample(audioFile) {
+export async function uploadVoiceSample(audioFile, name = 'My Voice') {
   const formData = new FormData();
   formData.append('file', audioFile);
 
-  return request('/api/profiles/create', {
+  return request(`/api/profiles/create?name=${encodeURIComponent(name)}`, {
     method: 'POST',
     body: formData,
   });
