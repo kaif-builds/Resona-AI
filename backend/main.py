@@ -103,7 +103,7 @@ async def create_profile(
     No fine-tuning needed — XTTS-v2 does zero-shot cloning from your sample.
     """
     # Validate file type
-    allowed = {".wav", ".mp3", ".ogg", ".flac", ".m4a"}
+    allowed = {".wav", ".mp3", ".ogg", ".flac", ".m4a", ".webm"}
     suffix = Path(file.filename).suffix.lower()
     if suffix not in allowed:
         raise HTTPException(400, f"Unsupported format '{suffix}'. Use: {allowed}")
@@ -268,23 +268,34 @@ def _convert_to_wav(src: Path, dst: Path):
         raise HTTPException(500, f"Audio conversion failed: {result.stderr}")
 
 
-def _get_audio_duration(wav_path: Path) -> float:
-    """Return duration of a WAV file in seconds."""
-    import wave
+def _get_audio_duration(audio_path: Path) -> float:
+    """Return duration of an audio file in seconds."""
+    # Try ffprobe first — works with any format including webm-converted WAVs
     try:
-        with wave.open(str(wav_path), "rb") as wf:
-            return wf.getnframes() / wf.getframerate()
-    except Exception:
-        # Fallback via ffprobe
-        import subprocess, json
+        import subprocess, json as _json
         ffprobe = _find_executable("ffprobe")
         result = subprocess.run(
             [ffprobe, "-v", "quiet", "-print_format", "json",
-             "-show_streams", str(wav_path)],
+             "-show_streams", str(audio_path)],
             capture_output=True, text=True
         )
-        data = json.loads(result.stdout)
-        return float(data["streams"][0].get("duration", 0))
+        if result.returncode == 0 and result.stdout.strip():
+            data = _json.loads(result.stdout)
+            for stream in data.get("streams", []):
+                dur = stream.get("duration")
+                if dur:
+                    return float(dur)
+    except Exception as e:
+        logger.warning(f"ffprobe duration detection failed: {e}")
+
+    # Fallback: Python wave module (WAV only)
+    try:
+        import wave
+        with wave.open(str(audio_path), "rb") as wf:
+            return wf.getnframes() / wf.getframerate()
+    except Exception as e:
+        logger.warning(f"wave module duration detection failed: {e}")
+        return 0.0
 
 
 async def _cleanup_file(path: Path, delay: int = 600):

@@ -170,7 +170,7 @@ Resona_AI/
 ## Developers
 
 - **Alkaif Gajdhar** — [GitHub](https://github.com/kaif-builds) · [LinkedIn](https://www.linkedin.com/in/alkaif-gajdhar-b6033328b)
-- **Akshat Jain** — [GitHub](https://github.com/akshatjain) · [LinkedIn](https://linkedin.com/in/akshatjain)
+- **Akshat Jain** — [GitHub](https://github.com/Akshat-Commit) · [LinkedIn](https://linkedin.com/in/akshatjain)
 
 ---
 

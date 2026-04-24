@@ -1,42 +1,30 @@
 /**
- * @license
- * SPDX-License-Identifier: Apache-2.0
+ * Resona AI — Redesigned UI
+ * Two-page: Landing → Voice Cloning Workspace
+ * Aesthetic: Dark premium AI-fintech, burnt orange energy gradients, soft glow effects
  */
 
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, useMotionValue, useSpring, useTransform, AnimatePresence } from 'motion/react';
-import { Search, ArrowRight, Menu, X, Globe, Layers, Cpu, Users, Gamepad2, Mic2, Activity, Github, Twitter, Linkedin, Mail, Play, Square, Trash2, CheckCircle2, Music, LoaderCircle, Download } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'motion/react';
+import {
+  ArrowRight, Mic2, Globe, Cpu, Trash2, Play, Square,
+  Download, LoaderCircle, Github, Linkedin, Mail, ChevronDown,
+  Activity
+} from 'lucide-react';
 import { uploadVoiceSample, synthesizeSpeech as synthesizeSpeechApi, deleteProfile } from './resonaApi.js';
 import { storage, db } from './firebase';
 import { ref as storageRef, uploadBytes } from 'firebase/storage';
 import { collection, doc, getDocs, orderBy, query, serverTimestamp, setDoc } from 'firebase/firestore';
 
-// --- Types ---
+// ─── Types ──────────────────────────────────────────────────────────────────
 
-interface Project {
+interface ProfileListItem {
   id: string;
-  title: string;
-  description: string;
-  category: string;
-  image: string;
+  name?: string;
+  createdAt?: string | number | Date | null;
 }
 
-const PROJECTS: Project[] = [
-  {
-    id: '1',
-    title: 'AI Voice Cloner',
-    description: 'Transform your voice into a high-fidelity digital asset. Authentic and personal.',
-    category: 'AI Platform',
-    image: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&q=80&w=1920'
-  },
-  {
-    id: '2',
-    title: 'Voice Tuning Engine',
-    description: 'Advanced frequency modulation for real-time vocal adjustment and emotional tone mapping.',
-    category: 'Audio Engineering',
-    image: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?auto=format&fit=crop&q=80&w=1920'
-  }
-];
+// ─── Constants ───────────────────────────────────────────────────────────────
 
 const DEVELOPERS = [
   {
@@ -53,391 +41,474 @@ const DEVELOPERS = [
   }
 ];
 
-// --- Components ---
+const LANG_OPTIONS = [
+  { code: 'en', name: 'English' },
+  { code: 'es', name: 'Spanish' },
+  { code: 'fr', name: 'French' },
+  { code: 'de', name: 'German' },
+  { code: 'it', name: 'Italian' },
+  { code: 'pt', name: 'Portuguese' },
+  { code: 'pl', name: 'Polish' },
+  { code: 'tr', name: 'Turkish' },
+  { code: 'ru', name: 'Russian' },
+  { code: 'nl', name: 'Dutch' },
+  { code: 'cs', name: 'Czech' },
+  { code: 'ar', name: 'Arabic' },
+  { code: 'zh-cn', name: 'Chinese (Simplified)' },
+  { code: 'ja', name: 'Japanese' },
+  { code: 'hu', name: 'Hungarian' },
+  { code: 'ko', name: 'Korean' },
+  { code: 'hi', name: 'Hindi' }
+];
 
-export default function App() {
-  const [activeProject, setActiveProject] = useState(PROJECTS[0]);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-  const [trail, setTrail] = useState<{ id: number, x: number, y: number, icon: string }[]>([]);
-  const trailIdRef = useRef(0);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [view, setView] = useState<'home' | 'cloning'>('home');
-  const [isMobile, setIsMobile] = useState(false);
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-  useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth <= 768);
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
-  // Mouse tracking for 3D tilt
-  const x = useMotionValue(0);
-  const y = useMotionValue(0);
-
-  const mouseXSpring = useSpring(x);
-  const mouseYSpring = useSpring(y);
-
-  const rotateX = useTransform(mouseYSpring, [-0.5, 0.5], ["10deg", "-10deg"]);
-  const rotateY = useTransform(mouseXSpring, [-0.5, 0.5], ["-10deg", "10deg"]);
-
-  const parallaxX = useTransform(mouseXSpring, [-0.5, 0.5], [20, -20]);
-  const parallaxY = useTransform(mouseYSpring, [-0.5, 0.5], [20, -20]);
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      const { innerWidth, innerHeight } = window;
-      const xPct = (e.clientX / innerWidth) - 0.5;
-      const yPct = (e.clientY / innerHeight) - 0.5;
-      x.set(xPct);
-      y.set(yPct);
-      setMousePos({ x: e.clientX, y: e.clientY });
-
-      // Add trail element
-      const icons = ['♪', '♫', '♬', '♩'];
-      const newNote = {
-        id: trailIdRef.current++,
-        x: e.clientX + 10,
-        y: e.clientY + 10,
-        icon: icons[Math.floor(Math.random() * icons.length)]
-      };
-      setTrail(prev => [...prev.slice(-15), newNote]);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, [x, y]);
-
-  return (
-    <>
-      {/* Music Trail */}
-      <AnimatePresence>
-        {trail.map((note) => (
-          <motion.div
-            key={note.id}
-            initial={{ opacity: 0.8, scale: 0.5, x: note.x, y: note.y }}
-            animate={{ opacity: 0, scale: 1.5, y: note.y - 50, x: note.x + (Math.random() * 40 - 20) }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 1, ease: "easeOut" }}
-            className="fixed pointer-events-none z-[99] text-emerald-500/40 font-serif text-xl"
-          >
-            {note.icon}
-          </motion.div>
-        ))}
-      </AnimatePresence>
-
-
-
-      {view === 'cloning' ? (
-        <VoiceCloningPage onBack={() => setView('home')} />
-      ) : (
-        <div className="relative min-h-screen flex flex-col justify-between px-0 pt-4 pb-0 overflow-x-hidden">
-          <div className="px-6 md:px-16">
-            <div className="cinematic-bg" />
-            <div className="grain-overlay" />
-            
-            {/* Header */}
-        <header className="flex flex-col md:flex-row justify-between items-center gap-6 md:gap-8 z-40">
-        <div className="flex justify-between items-center w-full md:w-auto gap-4">
-          <motion.div 
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="text-lg md:text-xl font-medium tracking-[0.4em] uppercase"
-          >
-            Resona AI
-          </motion.div>
-          
-          <button 
-            className="md:hidden p-2 text-white/60"
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-          >
-            {isMenuOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
-        </div>
-        
-        <div className="hidden md:flex items-center gap-12">
-          <motion.button 
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="p-2 hover:bg-white/5 rounded-full transition-colors text-white/60 hover:text-white"
-          >
-            <Menu size={20} />
-          </motion.button>
-        </div>
-
-        {/* Mobile Menu */}
-        <AnimatePresence>
-          {isMenuOpen && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
-              className="md:hidden flex flex-col gap-4 w-full items-center overflow-hidden pt-4 pb-8 border-b border-white/5"
-            >
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="w-full text-center py-2 text-white/40 text-[10px] uppercase tracking-[0.3em]"
-              >
-                Menu Content Coming Soon
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </header>
-
-      {/* Main Content */}
-      <main className="flex-1 flex items-center justify-center z-10 pt-8 md:pt-4 pb-12">
-        {/* Project Card - Expanded */}
-        <div className="w-full max-w-6xl md:perspective-[2000px]">
-          <motion.div
-            style={{ rotateX: window.innerWidth > 768 ? rotateX : 0, rotateY: window.innerWidth > 768 ? rotateY : 0 }}
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 1.5, ease: [0.23, 1, 0.32, 1] }}
-            className="glass-panel relative aspect-[4/5] md:aspect-[16/9] w-full overflow-hidden group"
-          >
-            {/* Project Image with parallax effect */}
-            <motion.img 
-              src={activeProject.image}
-              alt={activeProject.title}
-              initial={isMobile ? { filter: 'grayscale(100%) contrast(125%)', opacity: 0.6 } : false}
-              animate={isMobile ? { filter: 'grayscale(0%) contrast(100%)', opacity: 1 } : {}}
-              transition={{ duration: 5, delay: 1, ease: [0.22, 1, 0.36, 1] }}
-              className={`absolute inset-0 w-full h-full object-cover transition-all duration-1000 ${!isMobile ? 'opacity-60 grayscale contrast-125 group-hover:grayscale-0 group-hover:contrast-100' : ''}`}
-              style={{
-                x: window.innerWidth > 768 ? parallaxX : 0,
-                y: window.innerWidth > 768 ? parallaxY : 0,
-                scale: 1.1
-              }}
-            />
-
-            {/* Content Overlay */}
-            <div className="absolute inset-0 p-6 md:p-16 flex flex-col justify-end bg-gradient-to-t from-[#08090a]/90 via-[#08090a]/40 to-transparent">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                key={activeProject.id}
-                transition={{ delay: 0.5, duration: 1 }}
-                className="space-y-4 md:space-y-6"
-              >
-                <div className="text-[10px] md:text-xs uppercase tracking-[0.3em] text-emerald-500/80 font-medium">
-                  {activeProject.category}
-                </div>
-                <h2 className="text-4xl md:text-8xl font-light tracking-tight leading-[0.9]">
-                  {activeProject.title}
-                </h2>
-                <p className="text-xs md:text-lg text-white/60 max-w-2xl leading-relaxed font-light">
-                  {activeProject.description}
-                </p>
-                <div className="pt-4 flex items-center gap-6">
-                  {activeProject.id === '1' && (
-                    <motion.button 
-                      whileHover={{ scale: 1.02, backgroundColor: '#34d399' }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => setView('cloning')}
-                      className="w-full md:w-auto px-10 py-5 bg-emerald-500 text-black text-[11px] font-mono font-bold uppercase tracking-[0.4em] transition-all flex items-center justify-center shadow-[0_0_40px_rgba(16,185,129,0.2)] hover:shadow-[0_0_60px_rgba(16,185,129,0.4)]"
-                    >
-                      Start Cloning
-                    </motion.button>
-                  )}
-                </div>
-              </motion.div>
-            </div>
-
-            {/* Physical Depth Accents */}
-            <div className="absolute top-0 left-0 w-full h-[1px] bg-white/10" />
-            <div className="absolute top-0 left-0 w-[1px] h-full bg-white/10" />
-          </motion.div>
-        </div>
-      </main>
-      </div>
-
-      {/* Footer */}
-      <footer className="mt-24 p-8 md:p-16 bg-white/[0.03] backdrop-blur-xl border-t border-white/10 z-40 w-full">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-12 mb-16">
-            <div className="col-span-1 md:col-span-2 space-y-6">
-              <div className="text-2xl font-bold tracking-[0.4em] uppercase text-white">
-                Resona AI
-              </div>
-              <p className="text-sm text-white/60 max-w-sm leading-relaxed font-bold">
-                The next generation of vocal synthesis. We transform human voice into a digital asset, 
-                enabling seamless frequency tuning and authentic cloning for the modern creator.
-              </p>
-              <div className="flex gap-6 pt-4">
-                <FooterSocialIcon icon={<Twitter size={20} />} />
-                <FooterSocialIcon icon={<Github size={20} />} />
-                <FooterSocialIcon icon={<Linkedin size={20} />} />
-              </div>
-            </div>
-
-            <div className="space-y-6">
-              <h4 className="text-[11px] uppercase tracking-[0.3em] text-emerald-500 font-bold">Technology</h4>
-              <ul className="space-y-4 text-xs tracking-[0.2em] text-white/50 font-bold">
-                <li className="hover:text-white transition-colors cursor-pointer flex items-center gap-2">
-                  <Mic2 size={14} strokeWidth={2.5} /> Voice Cloning
-                </li>
-                <li className="hover:text-white transition-colors cursor-pointer flex items-center gap-2">
-                  <Activity size={14} strokeWidth={2.5} /> Frequency Tuning
-                </li>
-                <li className="hover:text-white transition-colors cursor-pointer flex items-center gap-2">
-                  <Cpu size={14} strokeWidth={2.5} /> Neural Synthesis
-                </li>
-              </ul>
-            </div>
-
-            <div className="space-y-6">
-              <h4 className="text-[11px] uppercase tracking-[0.3em] text-emerald-500 font-bold">Contact</h4>
-              <ul className="space-y-4 text-xs tracking-[0.2em] text-white/50 font-bold">
-                <li className="hover:text-white transition-colors cursor-pointer flex items-center gap-2">
-                  <Mail size={14} strokeWidth={2.5} /> alkaifgajdhar@gmail.com
-                </li>
-                <li className="hover:text-white transition-colors cursor-pointer flex items-center gap-2">
-                  <Mail size={14} strokeWidth={2.5} /> dummy@resona.ai
-                </li>
-              </ul>
-            </div>
-
-            <div className="space-y-6">
-              <h4 className="text-[11px] uppercase tracking-[0.3em] text-emerald-500 font-bold">Developers</h4>
-              <div className="space-y-8">
-                {DEVELOPERS.map((dev, index) => (
-                  <div key={index} className="space-y-3">
-                    <div className="text-[10px] text-white font-bold tracking-widest uppercase">{dev.name}</div>
-                    <div className="flex gap-4 text-white/40">
-                      <a href={dev.github} target="_blank" rel="noopener noreferrer" className="hover:text-emerald-400 transition-colors">
-                        <Github size={16} />
-                      </a>
-                      <a href={dev.linkedin} target="_blank" rel="noopener noreferrer" className="hover:text-emerald-400 transition-colors">
-                        <Linkedin size={16} />
-                      </a>
-                      <a href={`mailto:${dev.email}`} className="hover:text-emerald-400 transition-colors">
-                        <Mail size={16} />
-                      </a>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col md:flex-row justify-between items-center gap-8 pt-12 border-t border-white/10">
-            <div className="flex gap-12 text-[10px] uppercase tracking-[0.3em] text-white/40 font-bold">
-              <div>© 2026 Resona AI</div>
-              <div className="hover:text-white transition-colors cursor-pointer">Privacy Policy</div>
-              <div className="hover:text-white transition-colors cursor-pointer">Terms of Service</div>
-            </div>
-            <div className="text-[10px] uppercase tracking-[0.3em] text-white/20 font-bold">
-              Designed for the future of sound
-            </div>
-          </div>
-        </div>
-      </footer>
-
-      {/* Ambient Particles (Simple Canvas) */}
-      <ParticleBackground />
-    </div>
-  )}
-</>
-);
+function formatTime(s: number) {
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-// --- Sub-components ---
+function formatMonthYear(v: unknown) {
+  const d = v instanceof Date ? v : typeof v === 'number' || typeof v === 'string' ? new Date(v as any) : null;
+  return d && !isNaN(d.getTime()) ? d.toLocaleString(undefined, { month: 'short', year: 'numeric' }) : '—';
+}
 
-function VoiceCloningPage({ onBack }: { onBack: () => void }) {
+function downloadAudio(url: string, filename: string) {
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+// ─── Noise Texture SVG ────────────────────────────────────────────────────────
+
+const NoiseBg = () => (
+  <svg className="fixed inset-0 w-full h-full pointer-events-none z-0 opacity-[0.03]" xmlns="http://www.w3.org/2000/svg">
+    <filter id="noise"><feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter>
+    <rect width="100%" height="100%" filter="url(#noise)" opacity="1"/>
+  </svg>
+);
+
+// ─── Dot Grid Background ─────────────────────────────────────────────────────
+
+const DotGrid = () => (
+  <div
+    className="fixed inset-0 z-0 pointer-events-none"
+    style={{
+      backgroundImage: 'radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px)',
+      backgroundSize: '20px 20px'
+    }}
+  />
+);
+
+// ─── Animated Waveform ────────────────────────────────────────────────────────
+
+function WaveformViz({ active }: { active: boolean }) {
+  const bars = Array.from({ length: 32 }, (_, i) => i);
+  return (
+    <div className="flex items-center gap-[3px] h-10">
+      {bars.map(i => (
+        <motion.div
+          key={i}
+          className="w-[2px] rounded-full"
+          style={{ backgroundColor: active ? '#FF6A00' : 'rgba(255,255,255,0.15)' }}
+          animate={active ? {
+            height: [8, Math.random() * 32 + 6, 8],
+            opacity: [0.6, 1, 0.6]
+          } : { height: 3 }}
+          transition={active ? {
+            duration: 0.4 + Math.random() * 0.4,
+            repeat: Infinity,
+            delay: i * 0.03,
+            ease: 'easeInOut'
+          } : { duration: 0.3 }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ─── Cursor Glow ──────────────────────────────────────────────────────────────
+
+function CursorGlow() {
+  const [pos, setPos] = useState({ x: -200, y: -200 });
+  useEffect(() => {
+    const fn = (e: MouseEvent) => setPos({ x: e.clientX, y: e.clientY });
+    window.addEventListener('mousemove', fn);
+    return () => window.removeEventListener('mousemove', fn);
+  }, []);
+  return (
+    <div
+      className="fixed pointer-events-none z-[1] transition-transform duration-300"
+      style={{
+        left: pos.x - 250, top: pos.y - 250,
+        width: 500, height: 500,
+        background: 'radial-gradient(circle, rgba(255,106,0,0.06) 0%, transparent 70%)',
+        borderRadius: '50%'
+      }}
+    />
+  );
+}
+
+// ─── Hero Glow Blob ───────────────────────────────────────────────────────────
+
+function FrequencyWaves() {
+  // Generate 60 bars for the waveform
+  const bars = Array.from({ length: 60 });
+  
+  return (
+    <div 
+      className="absolute inset-0 flex items-center justify-center gap-[4px] sm:gap-[6px] md:gap-[8px] opacity-[0.15] pointer-events-none"
+      style={{
+        maskImage: 'linear-gradient(to right, transparent, black 15%, black 85%, transparent)',
+        WebkitMaskImage: 'linear-gradient(to right, transparent, black 15%, black 85%, transparent)'
+      }}
+    >
+      {bars.map((_, i) => {
+        // Create an envelope so center bars can be taller, edges remain shorter
+        const distance = Math.abs(i - 30) / 30; // 0 at center, 1 at edges
+        const envelope = 1 - Math.pow(distance, 1.5); // 1 at center, ~0 at edge
+        
+        const minH = 5 * envelope + 2;
+        const maxH = 60 * envelope + 10;
+        
+        return (
+          <motion.div
+            key={i}
+            className="w-[2px] sm:w-[3px] bg-gradient-to-t from-[#FF6A00] to-[#FF8C42] rounded-full"
+            initial={{ height: `${minH}%`, opacity: 0 }}
+            animate={{ 
+              height: [
+                `${minH}%`, 
+                `${Math.random() * (maxH - minH) + minH}%`, 
+                `${minH}%`
+              ],
+              opacity: [0, 1, 0]
+            }}
+            transition={{
+              duration: Math.random() * 2.5 + 2.0, // Slower speed
+              repeat: Infinity,
+              ease: "easeInOut",
+              delay: Math.random() * 3
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function HeroBlob() {
+  return (
+    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-0">
+      <motion.div
+        animate={{
+          scale: [1, 1.08, 1],
+          rotate: [0, 8, -5, 0],
+        }}
+        transition={{
+          duration: 12,
+          repeat: Infinity,
+          ease: 'easeInOut'
+        }}
+        className="w-[500px] h-[500px] md:w-[700px] md:h-[700px] rounded-full opacity-30"
+        style={{
+          background: 'radial-gradient(ellipse at center, rgba(255,106,0,0.25) 0%, rgba(200,74,0,0.1) 40%, transparent 70%)',
+          filter: 'blur(80px)'
+        }}
+      />
+    </div>
+  );
+}
+
+// ─── Logo Component ───────────────────────────────────────────────────────────
+
+function Logo({ size = 32 }: { size?: number }) {
+  return (
+    <div 
+      className="relative flex items-center justify-center shrink-0"
+      style={{ width: size, height: size, borderRadius: size * 0.25, background: '#111113', border: '1px solid #2A2A2E' }}
+    >
+      <div className="flex items-center justify-center gap-[2px] h-[40%]">
+        {[ '60%', '100%', '40%', '80%' ].map((h, i) => (
+          <div 
+            key={i}
+            className="w-[2px] rounded-full bg-[#FF6A00]"
+            style={{ height: h }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// LANDING PAGE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function LandingPage({ onEnter }: { onEnter: () => void }) {
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <div className="relative min-h-screen bg-[#0B0B0D] text-white overflow-hidden flex flex-col">
+      <NoiseBg />
+      <DotGrid />
+      <CursorGlow />
+
+      {/* Ambient top glow */}
+      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] z-0 pointer-events-none"
+        style={{ background: 'radial-gradient(ellipse, rgba(255,106,0,0.07) 0%, transparent 70%)' }}
+      />
+
+      {/* Nav */}
+      <nav className="relative z-10 flex justify-between items-center px-8 md:px-16 py-8">
+        <motion.div
+          initial={{ opacity: 0, x: -16 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+          className="flex items-center gap-3"
+        >
+          <Logo size={36} />
+          <span className="text-sm tracking-[0.3em] uppercase text-[#A1A1AA] font-bold ml-1">Resona AI</span>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, x: 16 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.8, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+          className="flex items-center gap-8"
+        >
+          {/* Top right header elements removed */}
+        </motion.div>
+      </nav>
+
+      {/* Hero */}
+      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-8 md:px-16 pb-16 pt-8 text-center">
+
+        <HeroBlob />
+        <FrequencyWaves />
+
+        {/* Main heading */}
+        <div className="overflow-hidden mb-2 pb-4 relative z-10 mt-8">
+          <motion.h1
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 1, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            className="text-[clamp(52px,9vw,130px)] font-extrabold leading-[0.88] tracking-[-0.03em] text-white"
+            style={{ fontFamily: "'Outfit', sans-serif" }}
+          >
+            Clone your
+          </motion.h1>
+        </div>
+        <div className="overflow-hidden mb-12 relative z-10">
+          <motion.h1
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 1, delay: 0.42, ease: [0.22, 1, 0.36, 1] }}
+            className="text-[clamp(52px,9vw,130px)] font-extrabold leading-[0.88] tracking-[-0.03em]"
+            style={{
+              fontFamily: "'Outfit', sans-serif",
+              background: 'linear-gradient(135deg, #FF6A00, #FF8C42, #C84A00)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+            }}
+          >
+            voice in seconds
+          </motion.h1>
+        </div>
+
+        {/* Sub + CTA */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.65 }}
+          className="flex flex-col items-center gap-8 relative z-10"
+        >
+          <p className="text-sm md:text-base text-[#A1A1AA] max-w-lg leading-relaxed font-light text-center">
+            Clone your voice with cutting-edge AI that preserves identity, emotion, and clarity.
+          </p>
+
+          <div className="flex items-center gap-4">
+            <button
+              onClick={onEnter}
+              onMouseEnter={() => setHovered(true)}
+              onMouseLeave={() => setHovered(false)}
+              className="group relative flex items-center gap-4 cursor-pointer"
+            >
+              <div
+                className="px-8 py-4 rounded-full font-bold text-sm tracking-wide flex items-center gap-3 transition-all duration-500"
+                style={{
+                  background: hovered
+                    ? 'linear-gradient(135deg, #FF8C42, #FF6A00)'
+                    : '#FFFFFF',
+                  color: hovered ? '#FFFFFF' : '#000000',
+                  boxShadow: hovered
+                    ? '0 0 60px rgba(255,106,0,0.4), 0 0 120px rgba(255,106,0,0.15)'
+                    : '0 0 30px rgba(255,255,255,0.1)',
+                }}
+              >
+                Begin Cloning
+                <ArrowRight size={16} className={`transition-transform duration-300 ${hovered ? 'translate-x-1' : ''}`} />
+              </div>
+            </button>
+          </div>
+        </motion.div>
+
+        {/* Feature pills */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 1, delay: 0.9 }}
+          className="flex flex-wrap justify-center gap-3 mt-20 relative z-10"
+        >
+          {['Neural Voice Cloning', 'Real-time Synthesis', '17 Languages', 'Studio Quality'].map((tag, i) => (
+            <div
+              key={i}
+              className="px-5 py-2.5 rounded-full text-[10px] tracking-[0.3em] uppercase text-[#A1A1AA]/60 transition-all duration-300 hover:border-[#FF6A00]/30 hover:text-[#FF8C42]"
+              style={{ border: '1px solid #2A2A2E' }}
+            >
+              {tag}
+            </div>
+          ))}
+        </motion.div>
+      </main>
+
+      {/* Bottom strip */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 1.1, duration: 0.8 }}
+        className="relative z-10 px-8 md:px-16 py-6 flex justify-between items-center"
+        style={{ borderTop: '1px solid #2A2A2E' }}
+      >
+        <div className="flex gap-8">
+          {DEVELOPERS.map((d, i) => (
+            <div key={i} className="flex items-center gap-3">
+              <span className="text-[10px] tracking-[0.3em] uppercase text-[#A1A1AA]/80 font-medium">{d.name}</span>
+              <div className="flex gap-2 text-[#A1A1AA]/60">
+                <a href={d.github} target="_blank" rel="noopener noreferrer" className="hover:text-[#FF6A00] transition-colors"><Github size={12}/></a>
+                <a href={d.linkedin} target="_blank" rel="noopener noreferrer" className="hover:text-[#FF6A00] transition-colors"><Linkedin size={12}/></a>
+                <a href={`mailto:${d.email}`} className="hover:text-[#FF6A00] transition-colors"><Mail size={12}/></a>
+              </div>
+            </div>
+          ))}
+        </div>
+        <span className="text-[10px] tracking-[0.3em] uppercase text-[#A1A1AA]/20 hidden md:block">© 2026 Resona AI</span>
+      </motion.div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// VOICE CLONING WORKSPACE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function WorkspacePage({ onBack }: { onBack: () => void }) {
+  const [mode, setMode] = useState<'clone' | 'tts'>('clone');
+  const [text, setText] = useState('');
+  const [language, setLanguage] = useState('en');
+  const [ttsSpeaker, setTtsSpeaker] = useState('Alex (Male)');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [sampleUrl, setSampleUrl] = useState<string | null>(null);
   const [audioName, setAudioName] = useState<string | null>(null);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const recordingTimeRef = useRef(0);
 
-  const getAudioDurationSeconds = async (file: File) => {
+  const getAudioDuration = async (file: File | Blob) => {
     const url = URL.createObjectURL(file);
     try {
       const audio = new Audio();
       audio.preload = 'metadata';
       audio.src = url;
-      const duration = await new Promise<number>((resolve, reject) => {
-        audio.onloadedmetadata = () => resolve(Number.isFinite(audio.duration) ? audio.duration : 0);
-        audio.onerror = () => reject(new Error('Failed to read audio metadata.'));
+      return await new Promise<number>((res) => {
+        audio.onloadedmetadata = () => res(isFinite(audio.duration) ? audio.duration : 0);
+        audio.onerror = () => res(0);
       });
-      return duration || 0;
-    } finally {
-      URL.revokeObjectURL(url);
-    }
+    } finally { URL.revokeObjectURL(url); }
   };
 
-  const persistProfileToFirebase = async (pId: string, file: File, durationSeconds: number) => {
-    const targetRef = storageRef(storage, `voices/${pId}/sample.wav`);
-    await uploadBytes(targetRef, file, { contentType: file.type || 'audio/wav' });
-    await setDoc(doc(db, 'profiles', pId), {
-      profileId: pId,
-      createdAt: serverTimestamp(),
-      duration: durationSeconds,
-    });
+  const persistToFirebase = async (pId: string, file: File, duration: number) => {
+    const tRef = storageRef(storage, `voices/${pId}/sample.wav`);
+    await uploadBytes(tRef, file, { contentType: file.type || 'audio/wav' });
+    await setDoc(doc(db, 'profiles', pId), { profileId: pId, createdAt: serverTimestamp(), duration });
   };
 
-  const createProfileFromSample = async (file: File, durationSeconds: number) => {
+  const createProfile = async (file: File, duration: number) => {
     const res = await uploadVoiceSample(file, `My Voice ${Date.now()}`);
     const pId = res?.profile_id ?? res?.profileId ?? res?.id ?? null;
-    if (!pId) throw new Error('Profile created, but no profileId returned.');
+    if (!pId) throw new Error('No profileId returned.');
     setProfileId(pId);
-    try {
-      await persistProfileToFirebase(pId, file, durationSeconds);
-    } catch (fbErr) {
-      console.warn('Firebase sync skipped (no credentials configured):', fbErr);
-    }
+    try { await persistToFirebase(pId, file, duration); } catch (e) { console.warn('Firebase skip:', e); }
     return pId;
   };
 
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
+
+      const mimeTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg', 'audio/mp4'];
+      let mimeType = '';
+      for (const mt of mimeTypes) {
+        if (MediaRecorder.isTypeSupported(mt)) { mimeType = mt; break; }
+      }
+      const mrOptions: MediaRecorderOptions = mimeType ? { mimeType } : {};
+      const mr = new MediaRecorder(stream, mrOptions);
+      const actualMime = mr.mimeType || mimeType || 'audio/webm';
+
+      mediaRecorderRef.current = mr;
       chunksRef.current = [];
+      mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
 
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunksRef.current.push(e.data);
-        }
-      };
-
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        const url = URL.createObjectURL(blob);
-        setSampleUrl(url);
+      mr.onstop = async () => {
+        const blob = new Blob(chunksRef.current, { type: actualMime });
+        const blobUrl = URL.createObjectURL(blob);
+        setSampleUrl(blobUrl);
         setAudioName('Recorded Sample');
-        stream.getTracks().forEach(track => track.stop());
+        stream.getTracks().forEach(t => t.stop());
 
-        const file = new File([blob], `sample-${Date.now()}.webm`, { type: 'audio/webm' });
-        createProfileFromSample(file, recordingTime)
-          .catch((err) => console.error('createProfileFromSample failed', err));
+        // Determine correct file extension from MIME type
+        let ext = '.webm';
+        if (actualMime.includes('ogg')) ext = '.ogg';
+        else if (actualMime.includes('mp4')) ext = '.m4a';
+        else if (actualMime.includes('wav')) ext = '.wav';
+
+        const file = new File([blob], `sample-${Date.now()}${ext}`, { type: actualMime });
+
+        // Get actual duration from the blob (avoids stale closure issue with recordingTime)
+        let duration = recordingTimeRef.current;
+        try {
+          const blobDuration = await getAudioDuration(blob);
+          if (blobDuration > 0) duration = blobDuration;
+        } catch { /* use timer fallback */ }
+
+        createProfile(file, duration).catch(err => {
+          console.error('Profile creation failed:', err);
+          alert(`Voice profile creation failed: ${err.message || 'Unknown error'}. Please try again.`);
+        });
       };
 
-      mediaRecorder.start();
+      mr.start(1000); // Collect data every second for reliability
       setIsRecording(true);
       setRecordingTime(0);
-      setSampleUrl(null);
-      setAudioName(null);
-      setProfileId(null);
-      setAudioUrl(null);
-
+      recordingTimeRef.current = 0;
+      setSampleUrl(null); setAudioName(null); setProfileId(null); setAudioUrl(null);
       timerRef.current = setInterval(() => {
-        setRecordingTime(prev => prev + 1);
+        setRecordingTime(p => {
+          const next = p + 1;
+          recordingTimeRef.current = next;
+          return next;
+        });
       }, 1000);
-    } catch (err) {
-      console.error("Error accessing microphone:", err);
-      alert("Microphone access is required for recording.");
-    }
+    } catch { alert("Microphone access required."); }
   };
 
   const stopRecording = () => {
@@ -450,670 +521,361 @@ function VoiceCloningPage({ onBack }: { onBack: () => void }) {
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (file.type.startsWith('audio/')) {
-        const url = URL.createObjectURL(file);
-        setSampleUrl(url);
-        setAudioName(file.name);
-        setIsRecording(false);
-        setProfileId(null);
-        setAudioUrl(null);
-        if (timerRef.current) clearInterval(timerRef.current);
-
-        getAudioDurationSeconds(file)
-          .then((duration) => createProfileFromSample(file, duration))
-          .catch((err) => console.error('createProfileFromSample failed', err));
-      } else {
-        alert("Please upload a valid audio file.");
-      }
-    }
+    if (!file) return;
+    if (!file.type.startsWith('audio/')) { alert("Please upload a valid audio file."); return; }
+    setSampleUrl(URL.createObjectURL(file));
+    setAudioName(file.name);
+    setIsRecording(false); setProfileId(null); setAudioUrl(null);
+    if (timerRef.current) clearInterval(timerRef.current);
+    getAudioDuration(file).then(d => createProfile(file, d)).catch(console.error);
   };
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  const maxWords = 500;
+  const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
+  const isOver = wordCount > maxWords;
+  // If mode is TTS, can gen is true if text is valid. If clone, we also need profileId
+  const canGen = mode === 'tts' 
+    ? (!!text.trim() && !isOver && !isLoading) 
+    : (!!profileId && !!text.trim() && !isOver && !isLoading);
+
+  const handleGenerate = async () => {
+    if (!canGen) return;
+    setError(null); setIsLoading(true);
+    setAudioUrl(null);
+    try {
+      let res;
+      if (mode === 'clone') {
+        res = await synthesizeSpeechApi({ text, profile_id: profileId!, language });
+      } else {
+        // Fallback for TTS: use standard synthesize (or a mock logic if no endpoint)
+        // Here we just use the same logic but a mock or default profile id can be provided
+        res = await synthesizeSpeechApi({ text, profile_id: 'default_tts_profile', language });
+      }
+      
+      let url: string | null = null;
+      if (res instanceof Blob) url = URL.createObjectURL(res);
+      else if (typeof res === 'string') url = res;
+      else if (res?.audio_url) url = res.audio_url;
+      else if (res?.audio_base64) url = `data:audio/wav;base64,${res.audio_base64}`;
+      else throw new Error('No audio returned.');
+      setAudioUrl(url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Synthesis failed. For TTS, please ensure backend supports without custom profile.');
+    } finally { setIsLoading(false); }
   };
 
   return (
-    <div className="min-h-screen bg-[#08090a] text-white p-6 md:p-16 flex flex-col relative overflow-hidden">
-      <div className="cinematic-bg opacity-30" />
-      <div className="grain-overlay" />
-      
-      <header className="flex justify-between items-center mb-12 md:mb-16 z-10">
-        <motion.button 
-          whileHover={{ x: -5, color: '#fff' }}
-          onClick={onBack} 
-          className="text-white/40 transition-all flex items-center gap-3 text-[9px] md:text-[10px] uppercase tracking-[0.4em] font-bold group"
-        >
-          <ArrowRight className="rotate-180 transition-transform" size={12} /> Back
-        </motion.button>
-        <div className="text-lg md:text-xl font-medium tracking-[0.4em] uppercase">Resona AI</div>
-      </header>
+    <div className="relative min-h-screen bg-[#0B0B0D] text-white overflow-x-hidden">
+      <NoiseBg />
+      <DotGrid />
+      <CursorGlow />
 
-      <main className="flex-1 max-w-5xl mx-auto w-full space-y-12 md:space-y-16 z-10">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-4 md:space-y-6"
-        >
-          <div className="text-[9px] md:text-[10px] uppercase tracking-[0.4em] text-emerald-500 font-bold">Workspace / Voice Synthesis</div>
-          <h1 className="text-4xl md:text-8xl font-light tracking-tighter leading-none">Voice Cloning</h1>
-          <p className="text-white/40 text-sm md:text-lg font-light max-w-2xl leading-relaxed">
-            Synthesize your unique vocal signature into a high-fidelity digital asset.
-          </p>
-        </motion.div>
+      {/* Top ambient glow */}
+      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] z-0 pointer-events-none"
+        style={{ background: 'radial-gradient(ellipse, rgba(255,106,0,0.06) 0%, transparent 70%)' }}
+      />
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
-          <motion.div 
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.2 }}
-            className={`glass-panel p-6 md:p-10 space-y-6 md:space-y-8 border transition-all group relative overflow-hidden ${isRecording ? 'border-emerald-500 bg-emerald-500/5' : 'border-white/5 hover:border-emerald-500/30'}`}
-          >
-            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-              <Mic2 size={60} className="md:w-[80px] md:h-[80px]" />
-            </div>
-            <div className={`w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center border transition-all ${isRecording ? 'bg-emerald-500 text-black border-emerald-500 animate-pulse' : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'}`}>
-              <Mic2 size={20} className="md:w-[24px] md:h-[24px]" />
+      {/* Nav */}
+      <nav className="relative z-10 flex items-center justify-between px-8 md:px-16 py-8" style={{ borderBottom: '1px solid #2A2A2E' }}>
+        <div className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity" onClick={onBack}>
+          <Logo size={32} />
+          <span className="text-[11px] tracking-[0.45em] uppercase text-[#A1A1AA]/80 font-bold ml-1">Resona AI</span>
+        </div>
+      </nav>
+
+      <main className="relative z-10 max-w-6xl mx-auto px-8 md:px-16 py-16 space-y-12">
+
+        {/* Segmented Control */}
+        <div className="flex justify-center mb-4 relative z-10">
+          <div className="p-1 rounded-full bg-[#111113] border border-[#2A2A2E] flex items-center shadow-lg">
+            <button
+              onClick={() => setMode('clone')}
+              className={`px-8 py-3 rounded-full text-xs font-semibold uppercase tracking-[0.2em] transition-all duration-300 ${mode === 'clone' ? 'bg-[#2A2A2E] text-white shadow-sm' : 'text-[#A1A1AA]/50 hover:text-white'}`}
+            >
+              Voice Clone
+            </button>
+            <button
+              onClick={() => setMode('tts')}
+              className={`px-8 py-3 rounded-full text-xs font-semibold uppercase tracking-[0.2em] transition-all duration-300 ${mode === 'tts' ? 'bg-[#2A2A2E] text-white shadow-sm' : 'text-[#A1A1AA]/50 hover:text-white'}`}
+            >
+              Text To Speech
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 relative z-10 w-full">
+          {/* Left Panel: Text Input */}
+          <div className="rounded-2xl p-8 flex flex-col min-h-[400px]" style={{ background: '#111113', border: '1px solid #2A2A2E' }}>
+            <div className="flex items-center gap-3 mb-6">
+              <Mic2 size={16} className="text-[#FF6A00]" />
+              <h2 className="text-sm font-semibold tracking-wide">Text to speak</h2>
             </div>
             
-            <div className="space-y-3 md:space-y-4">
-              <h3 className="text-xl md:text-2xl font-light tracking-tight">
-                {isRecording ? 'Recording...' : audioName ? audioName : 'Record Sample'}
-              </h3>
-              <p className="text-white/40 text-xs md:text-sm leading-relaxed font-light">
-                {isRecording 
-                  ? 'Capturing your vocal signature. Speak naturally for best results.' 
-                  : sampleUrl 
-                    ? 'Your voice sample is ready for processing. You can preview it below.'
-                    : 'Record a 30-second script to capture your unique vocal characteristics, emotional range, and cadence.'}
-              </p>
-            </div>
-
-            {isRecording && (
-              <div className="flex items-center gap-4 py-4">
-                <div className="text-3xl font-mono tracking-widest text-emerald-500">
-                  {formatTime(recordingTime)}
-                </div>
-                <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden">
-                  <motion.div 
-                    className="h-full bg-emerald-500"
-                    animate={{ width: ['0%', '100%'] }}
-                    transition={{ duration: 30, ease: 'linear' }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {sampleUrl && !isRecording && (
-              <div className="space-y-4 py-4">
-                <audio src={sampleUrl} controls className="w-full h-10 filter invert opacity-60" />
-                <div className="flex gap-4">
-                  <motion.button 
-                    whileHover={{ x: 5, color: '#f87171' }}
-                    onClick={() => {
-                      setSampleUrl(null);
-                      setAudioName(null);
-                      setProfileId(null);
-                      setAudioUrl(null);
-                    }}
-                    className="flex items-center gap-2 text-[10px] uppercase tracking-[0.4em] text-white/40 transition-colors"
-                  >
-                    <Trash2 size={12} /> Delete Sample
-                  </motion.button>
-                </div>
-              </div>
-            )}
-
-            {!isRecording && !sampleUrl && (
-              <motion.button 
-                whileHover={{ scale: 1.02, backgroundColor: 'rgba(255,255,255,0.1)' }}
-                whileTap={{ scale: 0.98 }}
-                onClick={startRecording}
-                className="w-full py-5 bg-white/5 text-[10px] uppercase tracking-[0.4em] font-bold transition-all border border-white/10 hover:border-white/20 flex items-center justify-center gap-3"
-              >
-                <Play size={12} fill="currentColor" />
-                Start Recording
-              </motion.button>
-            )}
-
-            {isRecording && (
-              <motion.button 
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={stopRecording}
-                className="w-full py-5 bg-emerald-500 text-black text-[10px] uppercase tracking-[0.4em] font-bold transition-all border border-emerald-500 hover:bg-emerald-400 flex items-center justify-center gap-3 shadow-[0_0_30px_rgba(16,185,129,0.3)]"
-              >
-                <Square size={12} fill="currentColor" /> Stop Recording
-              </motion.button>
-            )}
-          </motion.div>
-
-          <motion.div 
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.3 }}
-            className="glass-panel p-6 md:p-10 space-y-6 md:space-y-8 border border-white/5 hover:border-emerald-500/30 transition-all group relative overflow-hidden"
-          >
-            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-              <Globe size={60} className="md:w-[80px] md:h-[80px]" />
-            </div>
-            <div className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500 border border-emerald-500/20">
-              <Globe size={20} className="md:w-[24px] md:h-[24px]" />
-            </div>
-            <div className="space-y-3 md:space-y-4">
-              <h3 className="text-xl md:text-2xl font-light tracking-tight">Upload Audio</h3>
-              <p className="text-white/40 text-xs md:text-sm leading-relaxed font-light">
-                Already have a high-quality recording? Upload your .wav or .mp3 files directly to our engine.
-              </p>
-            </div>
-            <input 
-              type="file" 
-              ref={fileInputRef}
-              onChange={handleFileUpload}
-              accept="audio/*"
-              className="hidden"
+            <textarea
+              value={text}
+              onChange={e => setText(e.target.value)}
+              placeholder="Please enter text to speak..."
+              className="w-full flex-1 bg-transparent text-white placeholder-[#A1A1AA]/30 text-sm leading-relaxed resize-none focus:outline-none"
             />
-            <motion.button 
-              whileHover={{ scale: 1.02, backgroundColor: 'rgba(255,255,255,0.1)' }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => fileInputRef.current?.click()}
-              className="w-full py-5 bg-white/5 text-[10px] uppercase tracking-[0.4em] font-bold transition-all border border-white/10 hover:border-white/20 flex items-center justify-center gap-3"
-            >
-              <Globe size={12} />
-              Choose Files
-            </motion.button>
-          </motion.div>
-        </div>
-
-        <ProfileManager profileId={profileId} setProfileId={setProfileId} />
-        <SynthesisPanel profileId={profileId} onAudioUrl={setAudioUrl} />
-
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="pt-12 md:pt-16 border-t border-white/5"
-        >
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6 md:gap-8">
-            <div className="flex flex-col sm:flex-row items-center gap-6 md:gap-8 w-full md:w-auto">
-              <div className="space-y-2 w-full sm:w-auto">
-                <div className="text-[9px] md:text-[10px] uppercase tracking-[0.3em] text-white/20 font-bold">Status</div>
-                <div className="text-xs md:text-sm font-medium flex items-center gap-3">
-                  <div className={`w-2 h-2 rounded-full ${sampleUrl ? 'bg-emerald-500' : 'bg-white/20'} ${isRecording ? 'animate-pulse' : ''}`} /> 
-                  <span className="tracking-widest uppercase text-[10px] md:text-[11px]">
-                    {isRecording ? 'Recording in progress' : sampleUrl ? 'Profile creation in progress' : 'Awaiting voice sample'}
-                  </span>
-                </div>
-              </div>
-              <div className="h-8 md:h-12 w-[1px] bg-white/5 hidden sm:block" />
-              <div className="space-y-2 w-full sm:w-auto">
-                <div className="text-[9px] md:text-[10px] uppercase tracking-[0.3em] text-white/20 font-bold">Engine</div>
-                <div className="text-xs md:text-sm font-medium tracking-widest uppercase text-[10px] md:text-[11px]">Resona v2.4 Pro</div>
-              </div>
+            
+            <div className="flex justify-between items-center mt-6 pt-6" style={{ borderTop: '1px solid #2A2A2E' }}>
+              <span className="text-[10px] uppercase tracking-[0.2em] text-[#A1A1AA]/50 flex items-center gap-2">
+                <Activity size={12} /> Please input text
+              </span>
+              <span className={`text-[10px] tracking-[0.2em] uppercase ${isOver ? 'text-red-400' : 'text-[#A1A1AA]/40'}`}>
+                {wordCount} / {maxWords}
+              </span>
             </div>
           </div>
-        </motion.div>
-      </main>
 
-      <footer className="mt-24 py-12 border-t border-white/5 z-10">
-        <div className="flex flex-col md:flex-row justify-between items-center gap-6 text-[10px] uppercase tracking-[0.4em] text-white/20 font-bold">
-          <div className="flex flex-col md:flex-row items-center gap-6 md:gap-12">
-            <div>© 2026 Resona AI</div>
-            <div className="flex gap-8">
-              {DEVELOPERS.map((dev, idx) => (
-                <div key={idx} className="flex items-center gap-4">
-                  <span className="text-white/40">{dev.name}</span>
-                  <div className="flex gap-3">
-                    <a href={dev.github} target="_blank" rel="noopener noreferrer" className="hover:text-emerald-400 transition-colors">
-                      <Github size={12} />
-                    </a>
-                    <a href={dev.linkedin} target="_blank" rel="noopener noreferrer" className="hover:text-emerald-400 transition-colors">
-                      <Linkedin size={12} />
-                    </a>
-                    <a href={`mailto:${dev.email}`} className="hover:text-emerald-400 transition-colors">
-                      <Mail size={12} />
-                    </a>
+          {/* Right Panel */}
+          <div className="space-y-8">
+            {mode === 'clone' ? (
+              // Clone Mode Tools
+              <div className="space-y-8">
+                {/* Capture Card */}
+                <div className="rounded-2xl p-8" style={{ background: '#111113', border: '1px solid #2A2A2E' }}>
+                  <div className="flex items-center gap-3 mb-6">
+                    <Globe size={16} className="text-[#FF6A00]" />
+                    <h2 className="text-sm font-semibold tracking-wide">Choose audio</h2>
+                  </div>
+
+                  <div 
+                    className="relative rounded-2xl p-6 space-y-6 transition-all duration-500 overflow-hidden"
+                    style={{
+                      background: isRecording ? 'rgba(255,106,0,0.04)' : 'rgba(255,255,255,0.02)',
+                      border: isRecording ? '1px solid rgba(255,106,0,0.4)' : '1px solid #2A2A2E',
+                    }}
+                  >
+                    {isRecording && (
+                      <div className="absolute inset-0 rounded-2xl animate-pulse pointer-events-none"
+                        style={{ background: 'radial-gradient(circle at 50% 0%, rgba(255,106,0,0.08) 0%, transparent 70%)' }}
+                      />
+                    )}
+
+                    <div className="relative z-10">
+                      <h3 className="text-[11px] font-semibold tracking-wide uppercase text-[#A1A1AA]/80 mb-2">
+                        {isRecording ? 'Capturing...' : audioName || 'Select an audio file'}
+                      </h3>
+                      <p className="text-[#A1A1AA]/50 text-xs leading-relaxed max-w-[250px]">
+                        {isRecording
+                          ? 'Speak naturally. Vary your pitch and pace for best results.'
+                          : sampleUrl
+                          ? 'Sample captured. Ready for processing.'
+                          : 'Supported formats: MP3, WAV, M4A. Duration 10-60S.'}
+                      </p>
+                    </div>
+
+                    {isRecording && (
+                      <div className="space-y-3 relative z-10">
+                        <div className="text-3xl font-mono tracking-widest text-[#FF6A00]">{formatTime(recordingTime)}</div>
+                        <WaveformViz active={true} />
+                      </div>
+                    )}
+
+                    {sampleUrl && !isRecording && (
+                      <div className="space-y-3 relative z-10">
+                        <WaveformViz active={false} />
+                        <audio src={sampleUrl} controls className="w-full h-8 opacity-50" />
+                        <button
+                          onClick={() => { setSampleUrl(null); setAudioName(null); setProfileId(null); setAudioUrl(null); }}
+                          className="flex flex-row items-center gap-2 text-[10px] uppercase tracking-[0.35em] text-[#A1A1AA]/40 hover:text-red-400 transition-colors"
+                        >
+                          <Trash2 size={10} /> Delete
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="relative z-10 flex flex-wrap gap-4">
+                      {!isRecording && !sampleUrl && (
+                        <>
+                          <GhostButton onClick={startRecording} icon={<Play size={11} fill="currentColor"/>} label="Record" />
+                          <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="audio/*" className="hidden" />
+                          <GhostButton onClick={() => fileInputRef.current?.click()} icon={<Download size={11}/>} label="Upload" />
+                        </>
+                      )}
+                      {isRecording && (
+                        <PrimaryButton onClick={stopRecording} icon={<Square size={11} fill="currentColor"/>} label="Stop" />
+                      )}
+                    </div>
                   </div>
                 </div>
-              ))}
+              </div>
+            ) : (
+              // TTS Mode Tools
+              <div className="rounded-2xl p-8 space-y-8" style={{ background: '#111113', border: '1px solid #2A2A2E' }}>
+                <div className="space-y-3">
+                  <label className="text-[10px] tracking-[0.3em] uppercase text-[#A1A1AA]/50 font-semibold block">Language</label>
+                  <div className="relative">
+                    <select
+                      value={language}
+                      onChange={e => setLanguage(e.target.value)}
+                      className="w-full appearance-none bg-[rgba(255,255,255,0.02)] text-white text-sm p-4 rounded-xl border border-[#2A2A2E] focus:outline-none focus:border-[#FF6A00]/40 transition-colors cursor-pointer"
+                    >
+                      {LANG_OPTIONS.map(l => <option key={l.code} value={l.code} className="bg-[#0B0B0D]">{l.name}</option>)}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#A1A1AA]/50 pointer-events-none" />
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <label className="text-[10px] tracking-[0.3em] uppercase text-[#A1A1AA]/50 font-semibold block">Speaker</label>
+                  <div className="relative">
+                    <select
+                      value={ttsSpeaker}
+                      onChange={e => setTtsSpeaker(e.target.value)}
+                      className="w-full appearance-none bg-[rgba(255,255,255,0.02)] text-white text-sm p-4 rounded-xl border border-[#2A2A2E] focus:outline-none focus:border-[#FF6A00]/40 transition-colors cursor-pointer"
+                    >
+                      <option className="bg-[#0B0B0D]">Alex (Male)</option>
+                      <option className="bg-[#0B0B0D]">Sarah (Female)</option>
+                      <option className="bg-[#0B0B0D]">Marcus (Male)</option>
+                      <option className="bg-[#0B0B0D]">Emma (Female)</option>
+                    </select>
+                    <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#A1A1AA]/50 pointer-events-none" />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Shared Generate Button Area */}
+            <div className="rounded-2xl p-8" style={{ background: '#111113', border: '1px solid #2A2A2E' }}>
+              <div className="space-y-4">
+                {mode === 'clone' && !profileId && (
+                  <p className="text-[10px] tracking-[0.25em] uppercase text-[#A1A1AA]/30 text-center mb-4">Select or create a voice profile</p>
+                )}
+                <motion.button
+                  whileHover={canGen ? { scale: 1.01 } : {}}
+                  whileTap={canGen ? { scale: 0.98 } : {}}
+                  disabled={!canGen}
+                  onClick={handleGenerate}
+                  className="w-full flex items-center justify-center gap-3 px-8 py-5 text-[11px] uppercase tracking-[0.45em] font-bold rounded-xl transition-all"
+                  style={{
+                    background: canGen ? 'linear-gradient(135deg, #FF6A00, #C84A00)' : 'rgba(255,255,255,0.05)',
+                    color: canGen ? '#FFFFFF' : 'rgba(255,255,255,0.2)',
+                    cursor: canGen ? 'pointer' : 'not-allowed',
+                    boxShadow: canGen ? '0 0 50px rgba(255,106,0,0.25), 0 0 100px rgba(255,106,0,0.08)' : 'none',
+                  }}
+                >
+                  <Cpu size={14} strokeWidth={2} />
+                  Generate
+                </motion.button>
+
+                <AnimatePresence>
+                  {isLoading && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                      className="flex items-center justify-center gap-3 text-[10px] tracking-[0.35em] uppercase text-[#FF6A00] pt-4">
+                      <LoaderCircle size={13} className="animate-spin" /> Synthesising...
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {error && (
+                  <div className="bg-red-500/8 border border-red-400/20 rounded-xl p-4 text-red-300 text-[10px] tracking-[0.25em] uppercase text-center mt-4">{error}</div>
+                )}
+
+                {audioUrl && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                    className="rounded-xl p-5 space-y-4 mt-6"
+                    style={{ background: 'rgba(255,106,0,0.03)', border: '1px solid rgba(255,106,0,0.15)' }}
+                  >
+                    <div className="text-[10px] tracking-[0.4em] uppercase text-[#FF6A00]/80 font-semibold flex justify-between items-center">
+                      Output Ready
+                      <button
+                        onClick={() => downloadAudio(audioUrl, 'resona-output.wav')}
+                        className="text-[#A1A1AA]/80 hover:text-white transition-colors"
+                      >
+                        <Download size={14}/>
+                      </button>
+                    </div>
+                    <audio controls src={audioUrl} className="w-full h-8 opacity-60" />
+                  </motion.div>
+                )}
+              </div>
             </div>
           </div>
-          <div className="flex gap-8">
-            <span className="hover:text-white/40 cursor-pointer transition-colors">Security</span>
-            <span className="hover:text-white/40 cursor-pointer transition-colors">Privacy</span>
-          </div>
         </div>
+      </main>
+
+      {/* Footer */}
+      <footer className="relative z-10 mt-8 px-8 md:px-16 py-8 flex flex-col md:flex-row justify-between items-center gap-4" style={{ borderTop: '1px solid #2A2A2E' }}>
+        <div className="flex flex-wrap gap-8">
+          {DEVELOPERS.map((d, i) => (
+            <div key={i} className="flex items-center gap-3">
+              <span className="text-[10px] tracking-[0.3em] uppercase text-[#A1A1AA]/80 font-medium">{d.name}</span>
+              <div className="flex gap-2 text-[#A1A1AA]/60">
+                <a href={d.github} target="_blank" rel="noopener noreferrer" className="hover:text-[#FF6A00] transition-colors"><Github size={12}/></a>
+                <a href={d.linkedin} target="_blank" rel="noopener noreferrer" className="hover:text-[#FF6A00] transition-colors"><Linkedin size={12}/></a>
+                <a href={`mailto:${d.email}`} className="hover:text-[#FF6A00] transition-colors"><Mail size={12}/></a>
+              </div>
+            </div>
+          ))}
+        </div>
+        <span className="text-[10px] tracking-[0.3em] uppercase text-[#A1A1AA]/20">© 2026 Resona AI</span>
       </footer>
     </div>
   );
 }
 
-function downloadAudio(audioUrl: string, filename: string) {
-  const a = document.createElement('a');
-  a.href = audioUrl;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+// ─── Shared UI Primitives ─────────────────────────────────────────────────────
+
+function PrimaryButton({ onClick, icon, label }: { onClick: () => void; icon: React.ReactNode; label: string }) {
+  return (
+    <motion.button
+      whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
+      onClick={onClick}
+      className="w-full py-4 text-white text-[10px] uppercase tracking-[0.45em] font-bold flex items-center justify-center gap-3 rounded-full transition-all cursor-pointer"
+      style={{
+        background: 'linear-gradient(135deg, #FF6A00, #C84A00)',
+        boxShadow: '0 0 50px rgba(255,106,0,0.3), 0 0 100px rgba(255,106,0,0.1)',
+      }}
+    >
+      {icon}{label}
+    </motion.button>
+  );
 }
 
-type ProfileListItem = {
-  id: string;
-  name?: string;
-  createdAt?: string | number | Date | null;
-};
-
-function formatMonthYear(value: unknown) {
-  const d =
-    value instanceof Date ? value :
-    typeof value === 'number' ? new Date(value) :
-    typeof value === 'string' ? new Date(value) :
-    null;
-  if (!d || Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString(undefined, { month: 'short', year: 'numeric' });
+function GhostButton({ onClick, icon, label }: { onClick: () => void; icon: React.ReactNode; label: string }) {
+  return (
+    <motion.button
+      whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
+      onClick={onClick}
+      className="w-full py-4 bg-transparent text-[#A1A1AA]/60 hover:text-white text-[10px] uppercase tracking-[0.45em] font-medium flex items-center justify-center gap-3 rounded-full transition-all cursor-pointer"
+      style={{
+        border: '1px solid #2A2A2E',
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,106,0,0.3)';
+        (e.currentTarget as HTMLElement).style.boxShadow = '0 0 30px rgba(255,106,0,0.08)';
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLElement).style.borderColor = '#2A2A2E';
+        (e.currentTarget as HTMLElement).style.boxShadow = 'none';
+      }}
+    >
+      {icon}{label}
+    </motion.button>
+  );
 }
 
-function ProfileManager({
-  profileId,
-  setProfileId,
-}: {
-  profileId: string | null;
-  setProfileId: React.Dispatch<React.SetStateAction<string | null>>;
-}) {
-  const [profiles, setProfiles] = useState<ProfileListItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+// ═══════════════════════════════════════════════════════════════════════════════
+// ROOT
+// ═══════════════════════════════════════════════════════════════════════════════
 
-  const refresh = async () => {
-    setError(null);
-    setIsLoading(true);
-    try {
-      // Try Firebase first
-      const q = query(collection(db, 'profiles'), orderBy('createdAt', 'desc'));
-      const snapshot = await getDocs(q);
-      const normalized: ProfileListItem[] = snapshot.docs.map((d) => {
-        const data: any = d.data();
-        return {
-          id: String(data?.profileId ?? d.id),
-          name: data?.name,
-          createdAt: data?.createdAt?.toDate ? data.createdAt.toDate() : data?.createdAt,
-        };
-      }).filter((p) => p.id && p.id !== 'undefined');
-      setProfiles(normalized);
-    } catch (fbErr) {
-      console.warn('Firebase unavailable, falling back to backend API:', fbErr);
-      // Fallback: load profiles straight from the backend API
-      try {
-        const API_BASE_URL = (import.meta as any).env?.VITE_RESONA_API_BASE_URL || 'http://localhost:8000';
-        const res = await fetch(`${API_BASE_URL}/api/profiles`);
-        if (res.ok) {
-          const data = await res.json();
-          const list: ProfileListItem[] = (data.profiles || []).map((p: any) => ({
-            id: p.profile_id || p.id,
-            name: p.name,
-            createdAt: p.created_at,
-          }));
-          setProfiles(list);
-        }
-      } catch (apiErr) {
-        setError('Could not load profiles from Firebase or backend.');
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const handleDelete = async (id: string) => {
-    setError(null);
-    try {
-      await deleteProfile(id);
-      await refresh();
-      if (profileId === id) setProfileId(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to delete profile.');
-    }
-  };
+export default function App() {
+  const [page, setPage] = useState<'home' | 'workspace'>('home');
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 18 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.3 }}
-      className="glass-panel p-6 md:p-10 space-y-6 md:space-y-8 border border-white/5 hover:border-emerald-500/30 transition-all"
-    >
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div className="space-y-2">
-          <div className="text-[9px] md:text-[10px] uppercase tracking-[0.4em] text-emerald-500 font-bold">Profiles</div>
-          <h3 className="text-xl md:text-2xl font-light tracking-tight">Voice Profiles</h3>
-        </div>
-      </div>
-
-      {isLoading && (
-        <div className="space-y-3">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="h-14 bg-white/[0.03] border border-white/10 opacity-60 animate-pulse" />
-          ))}
-        </div>
-      )}
-
-      {!isLoading && profiles.length === 0 && (
-        <div className="text-[10px] uppercase tracking-[0.3em] text-white/25">
-          No voice profiles yet.
-        </div>
-      )}
-
-      {!isLoading && profiles.length > 0 && (
-        <div className="space-y-3">
-          {profiles.map((p) => (
-            <div
-              key={p.id}
-              className={`bg-white/[0.03] border p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4 ${profileId === p.id ? 'border-emerald-500/40' : 'border-white/10'}`}
-            >
-              <div className="space-y-1">
-                <div className="text-[10px] uppercase tracking-[0.35em] text-white/70">
-                  {p.name ? p.name : p.id}
-                </div>
-                <div className="text-[10px] uppercase tracking-[0.25em] text-white/25">
-                  {formatMonthYear(p.createdAt)}
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => setProfileId(p.id)}
-                  className="px-6 py-3 bg-emerald-500/15 border border-emerald-500/25 text-[10px] uppercase tracking-[0.35em] font-bold text-emerald-200"
-                >
-                  Use
-                </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => handleDelete(p.id)}
-                  className="px-6 py-3 bg-red-500/10 border border-red-400/25 text-[10px] uppercase tracking-[0.35em] font-bold text-red-200"
-                >
-                  Delete
-                </motion.button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {error && (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-red-500/10 border border-red-400/25 backdrop-blur-xl p-4 text-red-200 text-[10px] uppercase tracking-[0.2em]"
-        >
-          Mission Alert: {error}
+    <AnimatePresence mode="wait">
+      {page === 'home' ? (
+        <motion.div key="home" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.5 }}>
+          <LandingPage onEnter={() => setPage('workspace')} />
+        </motion.div>
+      ) : (
+        <motion.div key="workspace" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.5 }}>
+          <WorkspacePage onBack={() => setPage('home')} />
         </motion.div>
       )}
-    </motion.div>
+    </AnimatePresence>
   );
-}
-
-function SynthesisPanel({
-  profileId,
-  onAudioUrl,
-}: {
-  profileId: string | null;
-  onAudioUrl: (url: string | null) => void;
-}) {
-  const [text, setText] = useState('');
-  const [language, setLanguage] = useState('en');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
-
-  const maxWords = 500;
-  const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
-  const isOverLimit = wordCount > maxWords;
-
-  const LANG_OPTIONS = [
-    'en', 'es', 'fr', 'de', 'it', 'pt', 'pl', 'tr', 'ru', 'nl', 'cs', 'ar', 'zh-cn', 'ja', 'hu', 'ko', 'hi'
-  ];
-
-  const canGenerate = !!profileId && !!text.trim() && !isOverLimit && !isLoading;
-
-  const handleGenerate = async () => {
-    if (!profileId) return;
-    if (!text.trim()) return;
-    if (isOverLimit) {
-      setError('Input exceeds 500 words. Reduce text and re-run synthesis.');
-      return;
-    }
-
-    setError(null);
-    setIsLoading(true);
-    try {
-      const res = await synthesizeSpeechApi({ text, profile_id: profileId, language });
-
-      let nextUrl: string | null = null;
-      if (res instanceof Blob) {
-        nextUrl = URL.createObjectURL(res);
-      } else if (typeof res === 'string') {
-        nextUrl = res;
-      } else if (res?.audio_url) {
-        nextUrl = res.audio_url;
-      } else if (res?.audio_base64) {
-        nextUrl = `data:audio/wav;base64,${res.audio_base64}`;
-      } else {
-        throw new Error('Synthesis completed but returned no audio.');
-      }
-
-      setAudioUrl(nextUrl);
-      onAudioUrl(nextUrl);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Synthesis failed.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 18 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.35 }}
-      className="glass-panel p-6 md:p-10 space-y-6 md:space-y-8 border border-white/5 hover:border-emerald-500/30 transition-all"
-    >
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div className="space-y-2">
-          <div className="text-[9px] md:text-[10px] uppercase tracking-[0.4em] text-emerald-500 font-bold">Synthesis</div>
-          <h3 className="text-xl md:text-2xl font-light tracking-tight">Text-to-Speech</h3>
-        </div>
-        <div className="text-[10px] uppercase tracking-[0.3em] text-white/30">
-          {wordCount} / {maxWords} words
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          rows={6}
-          className="w-full bg-white/[0.03] border border-white/10 text-white/80 p-4 text-sm leading-relaxed focus:outline-none focus:border-emerald-500/40"
-          placeholder="Type or paste text to synthesise..."
-        />
-        {isOverLimit && (
-          <div className="text-[10px] uppercase tracking-[0.25em] text-red-200">
-            Word limit exceeded.
-          </div>
-        )}
-      </div>
-
-      <div className="space-y-2">
-        <div className="text-[9px] md:text-[10px] uppercase tracking-[0.3em] text-white/20 font-bold">Language</div>
-        <select
-          value={language}
-          onChange={(e) => setLanguage(e.target.value)}
-          className="w-full bg-white/[0.03] border border-white/10 text-white/80 p-4 text-sm focus:outline-none focus:border-emerald-500/40"
-        >
-          {LANG_OPTIONS.map((opt) => (
-            <option key={opt} value={opt} className="bg-[#0a0a0a]">
-              {opt}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="space-y-4">
-        <motion.button
-          whileHover={canGenerate ? { scale: 1.02, backgroundColor: '#34d399' } : {}}
-          whileTap={canGenerate ? { scale: 0.98 } : {}}
-          disabled={!canGenerate}
-          onClick={handleGenerate}
-          className={`w-full md:w-auto px-10 py-5 text-black text-[11px] uppercase tracking-[0.4em] font-bold transition-all flex items-center justify-center gap-4 ${canGenerate ? 'bg-emerald-500 shadow-[0_0_40px_rgba(16,185,129,0.2)] hover:shadow-[0_0_60px_rgba(16,185,129,0.4)]' : 'bg-white/10 text-white/20 cursor-not-allowed'}`}
-        >
-          <Cpu size={16} strokeWidth={2.5} />
-          Generate Audio
-        </motion.button>
-
-        <AnimatePresence>
-          {isLoading && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: [0.35, 1, 0.35], y: 0 }}
-              exit={{ opacity: 0, y: 8 }}
-              transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
-              className="text-[10px] uppercase tracking-[0.35em] text-emerald-200 flex items-center gap-3"
-            >
-              <LoaderCircle size={14} className="animate-spin" />
-              Synthesising...
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-red-500/10 border border-red-400/25 backdrop-blur-xl p-4 text-red-200 text-[10px] uppercase tracking-[0.2em]"
-          >
-            Mission Alert: {error}
-          </motion.div>
-        )}
-
-        {audioUrl && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-4 border border-white/10 bg-white/[0.02] p-5"
-          >
-            <audio controls src={audioUrl} className="w-full h-10 filter invert opacity-70" />
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => downloadAudio(audioUrl, 'resona-output.wav')}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-white/[0.04] border border-white/10 text-[10px] uppercase tracking-[0.35em] font-bold text-white/70 hover:text-white transition-colors"
-            >
-              <Download size={12} />
-              Download
-            </motion.button>
-          </motion.div>
-        )}
-      </div>
-    </motion.div>
-  );
-}
-
-function NavLink({ label, active = false }: { label: string, active?: boolean }) {
-  return (
-    <div className={`text-xs uppercase tracking-[0.3em] cursor-pointer transition-all duration-500 py-3 md:py-0 ${active ? 'text-white' : 'text-white/30 hover:text-white/60'}`}>
-      {label}
-    </div>
-  );
-}
-
-function FooterSocialIcon({ icon }: { icon: React.ReactNode }) {
-  return (
-    <motion.div 
-      whileHover={{ y: -5, color: '#10b981' }}
-      className="text-white/20 cursor-pointer transition-colors p-2 -m-2"
-    >
-      {icon}
-    </motion.div>
-  );
-}
-
-function SideNavLink({ icon, label }: { icon: React.ReactNode, label: string }) {
-  return (
-    <motion.div 
-      whileHover={{ x: 10 }}
-      className="nav-link"
-    >
-      <span className="text-emerald-500/40">{icon}</span>
-      {label}
-    </motion.div>
-  );
-}
-
-function ParticleBackground() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let particles: { x: number, y: number, size: number, speedX: number, speedY: number, opacity: number }[] = [];
-    const particleCount = 50;
-
-    const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
-
-    const createParticles = () => {
-      particles = [];
-      for (let i = 0; i < particleCount; i++) {
-        particles.push({
-          x: Math.random() * canvas.width,
-          y: Math.random() * canvas.height,
-          size: Math.random() * 1.5,
-          speedX: (Math.random() - 0.5) * 0.2,
-          speedY: (Math.random() - 0.5) * 0.2,
-          opacity: Math.random() * 0.5
-        });
-      }
-    };
-
-    const animate = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      particles.forEach(p => {
-        p.x += p.speedX;
-        p.y += p.speedY;
-
-        if (p.x < 0) p.x = canvas.width;
-        if (p.x > canvas.width) p.x = 0;
-        if (p.y < 0) p.y = canvas.height;
-        if (p.y > canvas.height) p.y = 0;
-
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(167, 243, 208, ${p.opacity})`;
-        ctx.fill();
-      });
-      requestAnimationFrame(animate);
-    };
-
-    window.addEventListener('resize', resize);
-    resize();
-    createParticles();
-    animate();
-
-    return () => window.removeEventListener('resize', resize);
-  }, []);
-
-  return <canvas ref={canvasRef} className="fixed inset-0 -z-10 pointer-events-none opacity-40" />;
 }
