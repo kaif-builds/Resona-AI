@@ -126,14 +126,7 @@ export default function App() {
         ))}
       </AnimatePresence>
 
-      {/* Custom Musical Cursor */}
-      <motion.div 
-        className="fixed pointer-events-none z-[100] text-emerald-400 mix-blend-screen hidden md:block"
-        animate={{ x: mousePos.x + 10, y: mousePos.y + 10 }}
-        transition={{ type: 'spring', damping: 25, stiffness: 250, mass: 0.5 }}
-      >
-        <Music size={24} strokeWidth={2.5} />
-      </motion.div>
+
 
       {view === 'cloning' ? (
         <VoiceCloningPage onBack={() => setView('home')} />
@@ -204,7 +197,7 @@ export default function App() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 1.5, ease: [0.23, 1, 0.32, 1] }}
-            className="glass-panel relative aspect-[4/5] md:aspect-[16/9] w-full overflow-hidden group md:cursor-none"
+            className="glass-panel relative aspect-[4/5] md:aspect-[16/9] w-full overflow-hidden group"
           >
             {/* Project Image with parallax effect */}
             <motion.img 
