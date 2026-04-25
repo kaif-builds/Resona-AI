@@ -34,9 +34,9 @@ const DEVELOPERS = [
   },
   {
     name: "Akshat Jain",
-    github: "https://github.com/akshatjain",
-    linkedin: "https://linkedin.com/in/akshatjain",
-    email: "akshat@resona.ai"
+    github: "https://github.com/Akshat-Commit",
+    linkedin: "https://www.linkedin.com/in/akshatjaindevs/",
+    email: "aj452794@gmail.com"
   }
 ];
 

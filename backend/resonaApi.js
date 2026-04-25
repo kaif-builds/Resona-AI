@@ -1,17 +1,7 @@
-/**
- * Resona AI — Frontend API Client
- * Paste this file into your React project: src/lib/resonaApi.js
- *
- * Set NEXT_PUBLIC_API_URL in your Vercel environment variables
- * to point to your Railway backend URL, e.g.:
- *   NEXT_PUBLIC_API_URL=https://resona-backend.up.railway.app
- */
+
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-// ─────────────────────────────────────────────────────────────
-//  VOICE PROFILES
-// ─────────────────────────────────────────────────────────────
 
 /**
  * Upload a voice sample and create a new voice profile.
@@ -68,9 +58,6 @@ export function getSampleUrl(profileId) {
   return `${BASE_URL}/api/profiles/${profileId}/sample`;
 }
 
-// ─────────────────────────────────────────────────────────────
-//  SYNTHESIS
-// ─────────────────────────────────────────────────────────────
 
 /**
  * Synthesize text → audio using a saved voice profile.
