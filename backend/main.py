@@ -25,7 +25,7 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# ── CORS (allow your Vercel frontend + localhost dev) ──────────────────────────
+
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002").split(",")
 app.add_middleware(
     CORSMiddleware,
@@ -35,7 +35,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Directory setup ─────────────────────────────────────────────────────────────
+
 BASE_DIR      = Path("./data")
 SAMPLES_DIR   = BASE_DIR / "samples"
 PROFILES_DIR  = BASE_DIR / "profiles"
@@ -44,25 +44,23 @@ OUTPUTS_DIR   = BASE_DIR / "outputs"
 for d in [SAMPLES_DIR, PROFILES_DIR, OUTPUTS_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
-# ── Lazy-load TTS model (downloads on first use, cached after) ─────────────────
+
 _tts_model = None
 
 def get_tts():
     global _tts_model
     if _tts_model is None:
         logger.info("Loading Coqui TTS model (first boot — may take a minute)...")
-        # Auto-accept Coqui TOS to avoid interactive prompt hanging the server
         os.environ["COQUI_TOS_AGREED"] = "1"
         from TTS.api import TTS
-        # XTTS-v2: best quality, supports voice cloning from a single sample
         _tts_model = TTS("tts_models/multilingual/multi-dataset/xtts_v2", gpu=False)
         logger.info("TTS model loaded ✓")
     return _tts_model
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  SCHEMAS
-# ══════════════════════════════════════════════════════════════════════════════
+
+
+
 
 class SynthesizeRequest(BaseModel):
     text: str
@@ -77,9 +75,9 @@ class ProfileMeta(BaseModel):
     created_at: str
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  ROUTES
-# ══════════════════════════════════════════════════════════════════════════════
+
+
+
 
 @app.get("/", tags=["Health"])
 def root():
@@ -91,7 +89,7 @@ def health():
     return {"status": "healthy"}
 
 
-# ── 1. Upload voice sample & create a profile ──────────────────────────────────
+
 @app.post("/api/profiles/create", tags=["Voice Profiles"])
 async def create_profile(
     name: str,
@@ -102,7 +100,6 @@ async def create_profile(
     Returns a profile_id that you use for synthesis later.
     No fine-tuning needed — XTTS-v2 does zero-shot cloning from your sample.
     """
-    # Validate file type
     allowed = {".wav", ".mp3", ".ogg", ".flac", ".m4a", ".webm"}
     suffix = Path(file.filename).suffix.lower()
     if suffix not in allowed:
@@ -112,12 +109,10 @@ async def create_profile(
     profile_dir = PROFILES_DIR / profile_id
     profile_dir.mkdir(parents=True)
 
-    # Save uploaded sample
     sample_path = profile_dir / f"sample{suffix}"
     with open(sample_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
-    # Convert to WAV if needed (XTTS-v2 works best with WAV)
     wav_path = profile_dir / "sample.wav"
     if suffix != ".wav":
         _convert_to_wav(sample_path, wav_path)
@@ -125,13 +120,11 @@ async def create_profile(
     else:
         sample_path.rename(wav_path)
 
-    # Validate minimum duration
     duration = _get_audio_duration(wav_path)
     if duration < 6:
         shutil.rmtree(profile_dir)
         raise HTTPException(400, f"Sample too short ({duration:.1f}s). Please provide at least 6 seconds.")
 
-    # Save metadata
     import json, datetime
     meta = {
         "profile_id": profile_id,
@@ -153,7 +146,7 @@ async def create_profile(
     }
 
 
-# ── 2. List all profiles ───────────────────────────────────────────────────────
+
 @app.get("/api/profiles", tags=["Voice Profiles"])
 def list_profiles():
     import json
@@ -165,7 +158,7 @@ def list_profiles():
     return {"profiles": profiles}
 
 
-# ── 3. Delete a profile ────────────────────────────────────────────────────────
+
 @app.delete("/api/profiles/{profile_id}", tags=["Voice Profiles"])
 def delete_profile(profile_id: str):
     profile_dir = PROFILES_DIR / profile_id
@@ -175,20 +168,18 @@ def delete_profile(profile_id: str):
     return {"success": True, "message": f"Profile {profile_id} deleted"}
 
 
-# ── 4. Synthesize speech ───────────────────────────────────────────────────────
+
 @app.post("/api/synthesize", tags=["Synthesis"])
 def synthesize(req: SynthesizeRequest, background_tasks: BackgroundTasks):
     """
     Generate speech from text using a saved voice profile.
     Returns the audio file directly.
     """
-    # Validate input
     if not req.text.strip():
         raise HTTPException(400, "Text cannot be empty")
     if len(req.text.split()) > 500:
         raise HTTPException(400, "Text exceeds 500 word limit for v1.0")
 
-    # Load profile
     import json
     profile_dir = PROFILES_DIR / req.profile_id
     meta_path = profile_dir / "meta.json"
@@ -202,7 +193,6 @@ def synthesize(req: SynthesizeRequest, background_tasks: BackgroundTasks):
     if not sample_wav.exists():
         raise HTTPException(500, "Voice sample file missing — please re-create profile")
 
-    # Run synthesis
     output_id   = str(uuid.uuid4())
     output_path = OUTPUTS_DIR / f"{output_id}.wav"
 
@@ -219,7 +209,6 @@ def synthesize(req: SynthesizeRequest, background_tasks: BackgroundTasks):
         logger.error(f"Synthesis failed: {e}")
         raise HTTPException(500, f"Synthesis error: {str(e)}")
 
-    # Clean up output after 10 minutes
     background_tasks.add_task(_cleanup_file, output_path, delay=600)
 
     return FileResponse(
@@ -229,7 +218,7 @@ def synthesize(req: SynthesizeRequest, background_tasks: BackgroundTasks):
     )
 
 
-# ── 5. Preview / play back a profile's original sample ────────────────────────
+
 @app.get("/api/profiles/{profile_id}/sample", tags=["Voice Profiles"])
 def get_sample(profile_id: str):
     sample = PROFILES_DIR / profile_id / "sample.wav"
@@ -238,21 +227,20 @@ def get_sample(profile_id: str):
     return FileResponse(str(sample), media_type="audio/wav")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  HELPERS
-# ══════════════════════════════════════════════════════════════════════════════
+
+
+
 
 def _find_executable(name: str) -> str:
     """Find an executable by name, checking common Homebrew paths as fallback."""
     path = shutil.which(name)
     if path:
         return path
-    # Homebrew on Apple Silicon / Intel fallback
     for prefix in ["/opt/homebrew/bin", "/usr/local/bin"]:
         candidate = os.path.join(prefix, name)
         if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
             return candidate
-    return name  # last resort — let the OS try
+    return name  
 
 
 def _convert_to_wav(src: Path, dst: Path):
@@ -270,7 +258,6 @@ def _convert_to_wav(src: Path, dst: Path):
 
 def _get_audio_duration(audio_path: Path) -> float:
     """Return duration of an audio file in seconds."""
-    # Try ffprobe first — works with any format including webm-converted WAVs
     try:
         import subprocess, json as _json
         ffprobe = _find_executable("ffprobe")
@@ -288,7 +275,6 @@ def _get_audio_duration(audio_path: Path) -> float:
     except Exception as e:
         logger.warning(f"ffprobe duration detection failed: {e}")
 
-    # Fallback: Python wave module (WAV only)
     try:
         import wave
         with wave.open(str(audio_path), "rb") as wf:

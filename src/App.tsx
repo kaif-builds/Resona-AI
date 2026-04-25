@@ -1,9 +1,3 @@
-/**
- * Resona AI — Redesigned UI
- * Two-page: Landing → Voice Cloning Workspace
- * Aesthetic: Dark premium AI-fintech, burnt orange energy gradients, soft glow effects
- */
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'motion/react';
 import {
@@ -16,7 +10,6 @@ import { storage, db } from './firebase';
 import { ref as storageRef, uploadBytes } from 'firebase/storage';
 import { collection, doc, getDocs, orderBy, query, serverTimestamp, setDoc } from 'firebase/firestore';
 
-// ─── Types ──────────────────────────────────────────────────────────────────
 
 interface ProfileListItem {
   id: string;
@@ -24,7 +17,6 @@ interface ProfileListItem {
   createdAt?: string | number | Date | null;
 }
 
-// ─── Constants ───────────────────────────────────────────────────────────────
 
 const DEFAULT_VOICES = [
   { id: 'alex',   label: 'Alex',   file: '/default_voices/alex.mp3' },
@@ -68,7 +60,6 @@ const LANG_OPTIONS = [
   { code: 'hi', name: 'Hindi' }
 ];
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function formatTime(s: number) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
@@ -85,7 +76,6 @@ function downloadAudio(url: string, filename: string) {
   document.body.appendChild(a); a.click(); a.remove();
 }
 
-// ─── Noise Texture SVG ────────────────────────────────────────────────────────
 
 const NoiseBg = () => (
   <svg className="fixed inset-0 w-full h-full pointer-events-none z-0 opacity-[0.03]" xmlns="http://www.w3.org/2000/svg">
@@ -94,7 +84,6 @@ const NoiseBg = () => (
   </svg>
 );
 
-// ─── Dot Grid Background ─────────────────────────────────────────────────────
 
 const DotGrid = () => (
   <div
@@ -106,7 +95,6 @@ const DotGrid = () => (
   />
 );
 
-// ─── Animated Waveform ────────────────────────────────────────────────────────
 
 function WaveformViz({ active }: { active: boolean }) {
   const bars = Array.from({ length: 32 }, (_, i) => i);
@@ -133,7 +121,6 @@ function WaveformViz({ active }: { active: boolean }) {
   );
 }
 
-// ─── Cursor Glow ──────────────────────────────────────────────────────────────
 
 function CursorGlow() {
   const [pos, setPos] = useState({ x: -200, y: -200 });
@@ -155,10 +142,8 @@ function CursorGlow() {
   );
 }
 
-// ─── Hero Glow Blob ───────────────────────────────────────────────────────────
 
 function FrequencyWaves() {
-  // Generate 60 bars for the waveform
   const bars = Array.from({ length: 60 });
   
   return (
@@ -170,9 +155,8 @@ function FrequencyWaves() {
       }}
     >
       {bars.map((_, i) => {
-        // Create an envelope so center bars can be taller, edges remain shorter
-        const distance = Math.abs(i - 30) / 30; // 0 at center, 1 at edges
-        const envelope = 1 - Math.pow(distance, 1.5); // 1 at center, ~0 at edge
+        const distance = Math.abs(i - 30) / 30;
+        const envelope = 1 - Math.pow(distance, 1.5);
         
         const minH = 5 * envelope + 2;
         const maxH = 60 * envelope + 10;
@@ -191,7 +175,7 @@ function FrequencyWaves() {
               opacity: [0, 1, 0]
             }}
             transition={{
-              duration: Math.random() * 2.5 + 2.0, // Slower speed
+              duration: Math.random() * 2.5 + 2.0,
               repeat: Infinity,
               ease: "easeInOut",
               delay: Math.random() * 3
@@ -226,7 +210,6 @@ function HeroBlob() {
   );
 }
 
-// ─── Logo Component ───────────────────────────────────────────────────────────
 
 function Logo({ size = 32 }: { size?: number }) {
   return (
@@ -247,9 +230,6 @@ function Logo({ size = 32 }: { size?: number }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// LANDING PAGE
-// ═══════════════════════════════════════════════════════════════════════════════
 
 function LandingPage({ onEnter }: { onEnter: () => void }) {
   const [hovered, setHovered] = useState(false);
@@ -265,7 +245,7 @@ function LandingPage({ onEnter }: { onEnter: () => void }) {
         style={{ background: 'radial-gradient(ellipse, rgba(255,106,0,0.07) 0%, transparent 70%)' }}
       />
 
-      {/* Nav */}
+      
       <nav className="relative z-10 flex justify-between items-center px-8 md:px-16 py-8">
         <motion.div
           initial={{ opacity: 0, x: -16 }}
@@ -405,9 +385,6 @@ function LandingPage({ onEnter }: { onEnter: () => void }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// VOICE CLONING WORKSPACE
-// ═══════════════════════════════════════════════════════════════════════════════
 
 function WorkspacePage({ onBack }: { onBack: () => void }) {
   const [mode, setMode] = useState<'clone' | 'tts'>('clone');
@@ -441,7 +418,7 @@ function WorkspacePage({ onBack }: { onBack: () => void }) {
         audioPreviewRef.current = null;
       }
     };
-  }, [mode]); // also cleanup on unmount or mode switch
+  }, [mode]);
 
   const togglePreview = (id: string, file: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -509,7 +486,6 @@ function WorkspacePage({ onBack }: { onBack: () => void }) {
         setAudioName('Recorded Sample');
         stream.getTracks().forEach(t => t.stop());
 
-        // Determine correct file extension from MIME type
         let ext = '.webm';
         if (actualMime.includes('ogg')) ext = '.ogg';
         else if (actualMime.includes('mp4')) ext = '.m4a';
@@ -517,7 +493,6 @@ function WorkspacePage({ onBack }: { onBack: () => void }) {
 
         const file = new File([blob], `sample-${Date.now()}${ext}`, { type: actualMime });
 
-        // Get actual duration from the blob (avoids stale closure issue with recordingTime)
         let duration = recordingTimeRef.current;
         try {
           const blobDuration = await getAudioDuration(blob);
@@ -530,7 +505,7 @@ function WorkspacePage({ onBack }: { onBack: () => void }) {
         });
       };
 
-      mr.start(1000); // Collect data every second for reliability
+      mr.start(1000);
       setIsRecording(true);
       setRecordingTime(0);
       recordingTimeRef.current = 0;
@@ -567,7 +542,6 @@ function WorkspacePage({ onBack }: { onBack: () => void }) {
   const maxWords = 500;
   const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
   const isOver = wordCount > maxWords;
-  // If mode is TTS, can gen is true if text is valid. If clone, we also need profileId
   const canGen = mode === 'tts' 
     ? (!!text.trim() && !isOver && !isLoading) 
     : (!!profileId && !!text.trim() && !isOver && !isLoading);
@@ -623,12 +597,12 @@ function WorkspacePage({ onBack }: { onBack: () => void }) {
       <DotGrid />
       <CursorGlow />
 
-      {/* Top ambient glow */}
+      
       <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] z-0 pointer-events-none"
         style={{ background: 'radial-gradient(ellipse, rgba(255,106,0,0.06) 0%, transparent 70%)' }}
       />
 
-      {/* Nav */}
+      
       <nav className="relative z-10 flex items-center justify-between px-8 md:px-16 py-8" style={{ borderBottom: '1px solid #2A2A2E' }}>
         <div className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity" onClick={onBack}>
           <Logo size={32} />
@@ -638,7 +612,7 @@ function WorkspacePage({ onBack }: { onBack: () => void }) {
 
       <main className="relative z-10 max-w-6xl mx-auto px-8 md:px-16 py-16 space-y-12">
 
-        {/* Segmented Control */}
+        
         <div className="flex justify-center mb-4 relative z-10">
           <div className="p-1 rounded-full bg-[#111113] border border-[#2A2A2E] flex items-center shadow-lg">
             <button
@@ -657,7 +631,7 @@ function WorkspacePage({ onBack }: { onBack: () => void }) {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 relative z-10 w-full">
-          {/* Left Panel: Text Input */}
+          
           <div className="rounded-2xl p-8 flex flex-col min-h-[400px]" style={{ background: '#111113', border: '1px solid #2A2A2E' }}>
             <div className="flex items-center gap-3 mb-6">
               <Mic2 size={16} className="text-[#FF6A00]" />
@@ -681,12 +655,11 @@ function WorkspacePage({ onBack }: { onBack: () => void }) {
             </div>
           </div>
 
-          {/* Right Panel */}
+          
           <div className="space-y-8">
             {mode === 'clone' ? (
-              // Clone Mode Tools
               <div className="space-y-8">
-                {/* Capture Card */}
+                
                 <div className="rounded-2xl p-8" style={{ background: '#111113', border: '1px solid #2A2A2E' }}>
                   <div className="flex items-center gap-3 mb-6">
                     <Globe size={16} className="text-[#FF6A00]" />
@@ -755,7 +728,6 @@ function WorkspacePage({ onBack }: { onBack: () => void }) {
                 </div>
               </div>
             ) : (
-              // TTS Mode Tools
               <div className="rounded-2xl p-8 space-y-8" style={{ background: '#111113', border: '1px solid #2A2A2E' }}>
                 <div className="space-y-3">
                   <label className="text-[10px] tracking-[0.3em] uppercase text-[#A1A1AA]/50 font-semibold block">Language</label>
@@ -812,7 +784,7 @@ function WorkspacePage({ onBack }: { onBack: () => void }) {
               </div>
             )}
 
-            {/* Shared Generate Button Area */}
+            
             <div className="rounded-2xl p-8" style={{ background: '#111113', border: '1px solid #2A2A2E' }}>
               <div className="space-y-4">
                 {mode === 'clone' && !profileId && (
@@ -872,7 +844,7 @@ function WorkspacePage({ onBack }: { onBack: () => void }) {
         </div>
       </main>
 
-      {/* Footer */}
+      
       <footer className="relative z-10 mt-8 px-8 md:px-16 py-8 flex flex-col md:flex-row justify-between items-center gap-4" style={{ borderTop: '1px solid #2A2A2E' }}>
         <div className="flex flex-wrap gap-8">
           {DEVELOPERS.map((d, i) => (
@@ -892,7 +864,6 @@ function WorkspacePage({ onBack }: { onBack: () => void }) {
   );
 }
 
-// ─── Shared UI Primitives ─────────────────────────────────────────────────────
 
 function PrimaryButton({ onClick, icon, label }: { onClick: () => void; icon: React.ReactNode; label: string }) {
   return (
@@ -933,9 +904,6 @@ function GhostButton({ onClick, icon, label }: { onClick: () => void; icon: Reac
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// ROOT
-// ═══════════════════════════════════════════════════════════════════════════════
 
 export default function App() {
   const [page, setPage] = useState<'home' | 'workspace'>('home');
