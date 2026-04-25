@@ -45,7 +45,6 @@ Upload a short audio clip (6+ seconds), type any text, and Resona generates spee
 ### Landing Page
 <img width="1468" height="869" alt="Screenshot 2026-04-25 at 2 57 32 PM" src="https://github.com/user-attachments/assets/f849bb6b-928c-4264-af9e-826d52f2a43d" />
 
-*The Resona AI home screen — premium dark aesthetic with burnt orange gradient accents.*
 
 ### Voice Cloning Workspace
 <img width="1468" height="869" alt="Screenshot 2026-04-25 at 3 27 32 PM" src="https://github.com/user-attachments/assets/d66e3593-b4fb-4b6f-ac37-085d29329f64" />
