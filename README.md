@@ -42,24 +42,23 @@ Upload a short audio clip (6+ seconds), type any text, and Resona generates spee
 
 ## 🖼️ Demo & Screenshots
 
-> **Note:** Add your screenshots to a `/docs/screenshots/` folder and update the paths below.
-
 ### Landing Page
-![Landing Page](<img width="1468" height="869" alt="Screenshot 2026-04-25 at 2 57 32 PM" src="https://github.com/user-attachments/assets/23db1b31-a38d-459a-bbeb-bbf20a7dc9a9" />
-)
+<img width="1468" height="869" alt="Screenshot 2026-04-25 at 2 57 32 PM" src="https://github.com/user-attachments/assets/f849bb6b-928c-4264-af9e-826d52f2a43d" />
+
 *The Resona AI home screen — premium dark aesthetic with burnt orange gradient accents.*
 
 ### Voice Cloning Workspace
-![Workspace - Clone Mode](<img width="1468" height="869" alt="Screenshot 2026-04-25 at 2 57 24 PM" src="https://github.com/user-attachments/assets/c4c227ac-617e-4c30-944e-4abb14e9a771" />
-)
+<img width="1468" height="869" alt="Screenshot 2026-04-25 at 3 27 32 PM" src="https://github.com/user-attachments/assets/d66e3593-b4fb-4b6f-ac37-085d29329f64" />
+
 *Upload or record a voice sample, then type any text to synthesize speech in that voice.*
 
 ### Preset Voice TTS
-![Workspace - TTS Mode](docs/screenshots/workspace_tts.png)
-*Choose from built-in preset voices — smart caching avoids redundant backend uploads.*
+<img width="1468" height="869" alt="Screenshot 2026-04-25 at 2 57 20 PM" src="https://github.com/user-attachments/assets/de05c5a1-847e-42e9-b701-9a3988b16a25" />
+
 
 ### Generated Audio Player
-![Audio Output](docs/screenshots/audio_player.png)
+<img width="1468" height="869" alt="Screenshot 2026-04-25 at 3 31 09 PM" src="https://github.com/user-attachments/assets/fe93df2a-c2e2-4d1d-bcf6-c8bea6d4fdd7" />
+
 *After synthesis, an inline audio player renders the cloned voice output directly in the UI.*
 
 ---
