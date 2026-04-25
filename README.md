@@ -45,11 +45,13 @@ Upload a short audio clip (6+ seconds), type any text, and Resona generates spee
 > **Note:** Add your screenshots to a `/docs/screenshots/` folder and update the paths below.
 
 ### Landing Page
-![Landing Page](docs/screenshots/landing.png)
+![Landing Page](<img width="1468" height="869" alt="Screenshot 2026-04-25 at 2 57 32 PM" src="https://github.com/user-attachments/assets/23db1b31-a38d-459a-bbeb-bbf20a7dc9a9" />
+)
 *The Resona AI home screen — premium dark aesthetic with burnt orange gradient accents.*
 
 ### Voice Cloning Workspace
-![Workspace - Clone Mode](docs/screenshots/workspace_clone.png)
+![Workspace - Clone Mode](<img width="1468" height="869" alt="Screenshot 2026-04-25 at 2 57 24 PM" src="https://github.com/user-attachments/assets/c4c227ac-617e-4c30-944e-4abb14e9a771" />
+)
 *Upload or record a voice sample, then type any text to synthesize speech in that voice.*
 
 ### Preset Voice TTS
