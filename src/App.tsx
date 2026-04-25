@@ -7,7 +7,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'motion/react';
 import {
-  ArrowRight, Mic2, Globe, Cpu, Trash2, Play, Square,
+  ArrowRight, Mic2, Globe, Cpu, Trash2, Play, Pause, Square,
   Download, LoaderCircle, Github, Linkedin, Mail, ChevronDown,
   Activity
 } from 'lucide-react';
@@ -25,6 +25,13 @@ interface ProfileListItem {
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
+
+const DEFAULT_VOICES = [
+  { id: 'alex',   label: 'Alex',   file: '/default_voices/alex.mp3' },
+  { id: 'zara',   label: 'Zara',   file: '/default_voices/zara.mp3' },
+  { id: 'marcus', label: 'Marcus', file: '/default_voices/marcus.mp3' },
+  { id: 'emma',   label: 'Emma',   file: '/default_voices/emma.mp3' },
+];
 
 const DEVELOPERS = [
   {
@@ -406,7 +413,11 @@ function WorkspacePage({ onBack }: { onBack: () => void }) {
   const [mode, setMode] = useState<'clone' | 'tts'>('clone');
   const [text, setText] = useState('');
   const [language, setLanguage] = useState('en');
-  const [ttsSpeaker, setTtsSpeaker] = useState('Alex (Male)');
+  const [ttsSpeaker, setTtsSpeaker] = useState('alex');
+  const [cachedProfiles, setCachedProfiles] = useState<Record<string, string>>({});
+  const [uploadingVoiceId, setUploadingVoiceId] = useState<string | null>(null);
+  const [activePreview, setActivePreview] = useState<string | null>(null);
+  const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -422,6 +433,29 @@ function WorkspacePage({ onBack }: { onBack: () => void }) {
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const recordingTimeRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      if (audioPreviewRef.current) {
+        audioPreviewRef.current.pause();
+        audioPreviewRef.current = null;
+      }
+    };
+  }, [mode]); // also cleanup on unmount or mode switch
+
+  const togglePreview = (id: string, file: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (activePreview === id) {
+      if (audioPreviewRef.current) audioPreviewRef.current.pause();
+      setActivePreview(null);
+    } else {
+      if (audioPreviewRef.current) audioPreviewRef.current.pause();
+      audioPreviewRef.current = new Audio(file);
+      audioPreviewRef.current.play().catch(console.error);
+      audioPreviewRef.current.onended = () => setActivePreview(null);
+      setActivePreview(id);
+    }
+  };
 
   const getAudioDuration = async (file: File | Blob) => {
     const url = URL.createObjectURL(file);
@@ -545,11 +579,30 @@ function WorkspacePage({ onBack }: { onBack: () => void }) {
     try {
       let res;
       if (mode === 'clone') {
-        res = await synthesizeSpeechApi({ text, profile_id: profileId!, language });
+        if (!profileId) throw new Error("Please capture or upload a voice first.");
+        res = await synthesizeSpeechApi({ text, profile_id: profileId, language });
       } else {
-        // Fallback for TTS: use standard synthesize (or a mock logic if no endpoint)
-        // Here we just use the same logic but a mock or default profile id can be provided
-        res = await synthesizeSpeechApi({ text, profile_id: 'default_tts_profile', language });
+        let currentProfileId = cachedProfiles[ttsSpeaker];
+        if (!currentProfileId) {
+          setUploadingVoiceId(ttsSpeaker);
+          try {
+            const selectedVoice = DEFAULT_VOICES.find(v => v.id === ttsSpeaker);
+            if (!selectedVoice) throw new Error("Invalid voice selected.");
+            const fetchRes = await fetch(selectedVoice.file);
+            if (!fetchRes.ok) throw new Error("Failed to load standard voice sample.");
+            const blob = await fetchRes.blob();
+            const file = new File([blob], `${selectedVoice.id}.mp3`, { type: 'audio/mpeg' });
+            
+            const uploadRes = await uploadVoiceSample(file, selectedVoice.label);
+            currentProfileId = uploadRes?.profile_id ?? uploadRes?.profileId ?? uploadRes?.id;
+            if (!currentProfileId) throw new Error("Failed to initialize voice profile for the selected speaker.");
+            
+            setCachedProfiles(prev => ({ ...prev, [ttsSpeaker]: currentProfileId! }));
+          } finally {
+            setUploadingVoiceId(null);
+          }
+        }
+        res = await synthesizeSpeechApi({ text, profile_id: currentProfileId, language });
       }
       
       let url: string | null = null;
@@ -720,18 +773,40 @@ function WorkspacePage({ onBack }: { onBack: () => void }) {
 
                 <div className="space-y-3">
                   <label className="text-[10px] tracking-[0.3em] uppercase text-[#A1A1AA]/50 font-semibold block">Speaker</label>
-                  <div className="relative">
-                    <select
-                      value={ttsSpeaker}
-                      onChange={e => setTtsSpeaker(e.target.value)}
-                      className="w-full appearance-none bg-[rgba(255,255,255,0.02)] text-white text-sm p-4 rounded-xl border border-[#2A2A2E] focus:outline-none focus:border-[#FF6A00]/40 transition-colors cursor-pointer"
-                    >
-                      <option className="bg-[#0B0B0D]">Alex (Male)</option>
-                      <option className="bg-[#0B0B0D]">Sarah (Female)</option>
-                      <option className="bg-[#0B0B0D]">Marcus (Male)</option>
-                      <option className="bg-[#0B0B0D]">Emma (Female)</option>
-                    </select>
-                    <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#A1A1AA]/50 pointer-events-none" />
+                  <div className="grid grid-cols-2 gap-4">
+                    {DEFAULT_VOICES.map(v => {
+                      const isSelected = ttsSpeaker === v.id;
+                      const isPlaying = activePreview === v.id;
+                      const isUploading = uploadingVoiceId === v.id;
+                      
+                      return (
+                        <div
+                          key={v.id}
+                          onClick={() => setTtsSpeaker(v.id)}
+                          className={`relative flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all duration-300 ${
+                            isSelected
+                              ? 'bg-[rgba(255,106,0,0.05)] border-[#FF6A00] shadow-[0_0_15px_rgba(255,106,0,0.2)]'
+                              : 'bg-[rgba(255,255,255,0.02)] border-[#2A2A2E] hover:border-[#A1A1AA]/40'
+                          }`}
+                        >
+                          <span className="text-sm font-medium">{v.label}</span>
+                          <div className="flex items-center">
+                            {isUploading ? (
+                              <LoaderCircle size={14} className="animate-spin text-[#FF6A00]" />
+                            ) : (
+                              <button
+                                onClick={(e) => togglePreview(v.id, v.file, e)}
+                                className={`p-2 rounded-full transition-colors ${
+                                  isPlaying ? 'bg-[#FF6A00] text-white hover:bg-[#C84A00]' : 'bg-[#2A2A2E] text-[#A1A1AA] hover:text-white'
+                                }`}
+                              >
+                                {isPlaying ? <Pause size={12} fill="currentColor" /> : <Play size={12} fill="currentColor" />}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
