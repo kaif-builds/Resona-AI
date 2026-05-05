@@ -1,10 +1,25 @@
 # GitHub Linguist overrides
-# Exclude frontend/config TypeScript files from language statistics
+# Exclude frontend/config/vendor files from language statistics
 # so the repo correctly shows Python as the dominant language.
 
-src/*.ts        linguist-vendored
-src/*.tsx       linguist-vendored
-*.ts            linguist-vendored
-*.tsx           linguist-vendored
-vite.config.ts  linguist-vendored
-tsconfig.json   linguist-vendored
+# --- TypeScript / TSX (React frontend) ---
+src/*.ts         linguist-vendored
+src/*.tsx        linguist-vendored
+*.ts             linguist-vendored
+*.tsx            linguist-vendored
+vite.config.ts   linguist-vendored
+tsconfig.json    linguist-vendored
+
+# --- HTML ---
+*.html           linguist-vendored
+index.html       linguist-vendored
+
+# --- CSS ---
+*.css            linguist-vendored
+src/index.css    linguist-vendored
+
+# --- Font folder (demo HTML/CSS shipped with typeface) ---
+font/**          linguist-vendored
+
+# --- Backend venv (third-party Python packages) ---
+backend/venv/**  linguist-vendored
