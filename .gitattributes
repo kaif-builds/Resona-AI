@@ -1,0 +1,10 @@
+# GitHub Linguist overrides
+# Exclude frontend/config TypeScript files from language statistics
+# so the repo correctly shows Python as the dominant language.
+
+src/*.ts        linguist-vendored
+src/*.tsx       linguist-vendored
+*.ts            linguist-vendored
+*.tsx           linguist-vendored
+vite.config.ts  linguist-vendored
+tsconfig.json   linguist-vendored
